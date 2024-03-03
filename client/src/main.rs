@@ -1,8 +1,11 @@
-use anyhow::{self, bail, Result};
+use anyhow::{self, Result};
 use reqwest::Client;
-use server::NRClient;
+use server::{
+    query::Parameterized,
+    trace::{Trace, TraceResult, QUERY as TRACE_QUERY},
+    NRClient,
+};
 use std::sync::OnceLock;
-use tokio;
 
 use server::application::{Application, ApplicationResult, QUERY as APP_QUERY};
 
@@ -28,15 +31,27 @@ async fn main() -> Result<()> {
         .api_key(api_key)
         .http_client(Client::builder());
 
-    let applications = client.search_application("fre-address-api-v2-prod").await;
-
-    dbg!(&applications);
-
-    let selected_app = applications
-        .expect("No applications found!")
-        .first()
-        .map(|app| Application::from_result(app))
+    let applications = client
+        .query::<ApplicationResult>(APP_QUERY.param(["fre-address-api-v2-prod", ""]))
+        .await
         .unwrap();
+
+    let selected = applications.first().map(Application::from_result).unwrap();
+
+    dbg!(&selected);
+
+    let mut traces = client
+        .query::<TraceResult>(TRACE_QUERY.param([&selected.entity_guid, "1 minute ago"]))
+        .await
+        .unwrap();
+
+    let first_trace = traces
+        .into_iter()
+        .filter_map(|t| Trace::from_result(&t))
+        .take(1)
+        .last();
+
+    dbg!(&first_trace);
 
     Ok(())
 }

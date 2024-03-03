@@ -1,11 +1,11 @@
 /* Flow
-    - Search for an application & select one
-    - Store that application
-        - appName
-        - entityGuid
-    - Select some time period
-    - Get Traces for selected application within the specified time period
-    - Get Trace data for found traces
+    - Search for an application & select one OK
+    - Store that application OK
+        - appName OK
+        - entityGuid OK
+    - Select some time period OK
+    - Get Traces for selected application within the specified time period OK
+    - Get Trace data for found traces ...
 */
 
 use anyhow::anyhow;
@@ -15,8 +15,13 @@ use reqwest::{
 };
 
 pub mod application;
-use application::{ApplicationResult, ApplicationSearchResult, QUERY as APP_QUERY};
-use serde::Deserialize;
+pub mod newrelic;
+pub mod query;
+pub mod trace;
+use serde::de::DeserializeOwned;
+
+use newrelic::QueryResponse;
+use trace::Trace;
 
 pub struct NRClient<'a> {
     url: Option<&'a str>,
@@ -61,8 +66,7 @@ impl<'a> NRClient<'a> {
             HeaderValue::from_str(
                 self.api_key
                     .as_ref()
-                    .expect("ERROR: API Key must be provided first!")
-                    .as_ref(),
+                    .expect("ERROR: API Key must be provided first!"),
             )
             .unwrap(),
         );
@@ -72,37 +76,39 @@ impl<'a> NRClient<'a> {
         self
     }
 
-    // pub async fn get_traces(&self, guid: &str) {
-    //     Some(
-    //         self.
-    //     )
-    // }
+    pub async fn trace_metrics(traces: Vec<Trace>) {}
 
-    pub async fn search_application(&self, name: &str) -> Option<Vec<ApplicationResult>> {
-        Some(
-            self.query::<ApplicationSearchResult>(APP_QUERY.replace("$name", name))
-                .await?
-                .data
-                .actor
-                .account
-                .nrql
-                .results,
-        )
-    }
+    pub async fn query<T: DeserializeOwned + std::fmt::Debug + Default>(
+        &self,
+        query_str: String,
+    ) -> Option<Vec<T>> {
+        // dbg!(&query_str);
 
-    pub async fn query<T: for<'de> Deserialize<'de>>(&self, query_str: String) -> Option<T> {
         let response = self
             .client
             .clone()?
             .request(Method::POST, self.url?)
-            .body(query_str)
+            .body(
+                query_str.replace(
+                    "$account",
+                    &self
+                        .account
+                        .expect("ERROR: No account number linked to client!")
+                        .to_string(),
+                ),
+            )
             .send()
             .await;
 
         if let Ok(data) = response {
-            let json = data.json::<T>().await.map_err(|e| anyhow!(e));
+            let json = data
+                .json::<QueryResponse<T>>()
+                .await
+                .map_err(|e| anyhow!(e))
+                .unwrap_or_default();
 
-            return Some(json.unwrap());
+            // dbg!(&json);
+            return Some(json.data.actor.account.nrql.results);
         }
 
         None
