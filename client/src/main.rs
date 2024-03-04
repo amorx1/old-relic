@@ -1,13 +1,12 @@
 use anyhow::{self, Result};
 use reqwest::Client;
 use server::{
-    query::Parameterized,
-    trace::{Trace, TraceResult, QUERY as TRACE_QUERY},
+    trace::{Trace, TraceResult},
     NRClient,
 };
 use std::sync::OnceLock;
 
-use server::application::{Application, ApplicationResult, QUERY as APP_QUERY};
+use server::application::{Application, ApplicationResult};
 
 const ENDPOINT: &str = "https://api.newrelic.com/graphql";
 static ACCOUNT: OnceLock<i64> = OnceLock::new();
@@ -31,27 +30,24 @@ async fn main() -> Result<()> {
         .api_key(api_key)
         .http_client(Client::builder());
 
-    let applications = client
-        .query::<ApplicationResult>(APP_QUERY.param(["fre-address-api-v2-prod", ""]))
+    let selected= client
+        .query::<ApplicationResult>(
+            "SELECT (appName, entityGuid) FROM Transaction WHERE appName LIKE 'fre-address-api-v2-prod'",
+        )
         .await
+        .and_then(|a| a.first().map(Application::from))
         .unwrap();
 
-    let selected = applications.first().map(Application::from_result).unwrap();
-
-    dbg!(&selected);
-
-    let mut traces = client
-        .query::<TraceResult>(TRACE_QUERY.param([&selected.entity_guid, "1 minute ago"]))
+    let trace = client
+        .query::<TraceResult>(format!(
+            "SELECT traceId FROM Transaction WHERE entity.Guid = {} SINCE 1 minute ago",
+            selected.entity_guid
+        ))
         .await
+        .and_then(|t| t.first().map(Trace::from))
         .unwrap();
 
-    let first_trace = traces
-        .into_iter()
-        .filter_map(|t| Trace::from_result(&t))
-        .take(1)
-        .last();
-
-    dbg!(&first_trace);
+    dbg!(&trace);
 
     Ok(())
 }
