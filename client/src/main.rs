@@ -1,8 +1,9 @@
-use anyhow::{self, Result};
+use anyhow::{anyhow, Result};
 use reqwest::Client;
 use server::{
+    timeseries::{Timeseries, TimeseriesResult},
     trace::{Trace, TraceResult},
-    NRClient,
+    NewRelicClient,
 };
 use std::sync::OnceLock;
 
@@ -23,7 +24,7 @@ async fn main() -> Result<()> {
     let api_key = API_KEY
         .get_or_init(|| std::env::var("NR_API_KEY").expect("ERROR: No NR_API_KEY provided!"));
 
-    let mut client = NRClient::builder();
+    let mut client = NewRelicClient::builder();
     client
         .url(ENDPOINT)
         .account(account)
@@ -36,7 +37,7 @@ async fn main() -> Result<()> {
         )
         .await
         .and_then(|a| a.first().map(Application::from))
-        .unwrap();
+        .ok_or(anyhow!("No applications found!"))?;
 
     let trace = client
         .query::<TraceResult>(format!(
@@ -45,9 +46,17 @@ async fn main() -> Result<()> {
         ))
         .await
         .and_then(|t| t.first().map(Trace::from))
-        .unwrap();
+        .ok_or(anyhow!("No traces found!"))?;
 
     dbg!(&trace);
+
+    let data_point = client.query::<TimeseriesResult>(
+        "SELECT sum(newrelic.goldenmetrics.infra.awsapigatewayresourcewithmetrics.requests) AS 'Requests' FROM Metric WHERE entity.guid in ('MjU0MDc5MnxJTkZSQXxOQXw4MDE0OTk0OTg4MDIzNTAxOTQ0', 'MjU0MDc5MnxJTkZSQXxOQXw4Njc2NDEwODc3ODY4NDI2Mzcz', 'MjU0MDc5MnxJTkZSQXxOQXwtODA4OTQxNjQyMzkzODMwODg2NQ', 'MjU0MDc5MnxJTkZSQXxOQXwtMzMzMDQwNzA1ODI3MDQwODE5MA', 'MjU0MDc5MnxJTkZSQXxOQXw0NjY5MzQ3MTY5NTU5NDUyODc2', 'MjU0MDc5MnxJTkZSQXxOQXwxNTA2ODc2MTg0MjI0NTQyNjU3') FACET entity.name LIMIT MAX TIMESERIES SINCE 5 minutes ago UNTIL now")
+        .await
+        .and_then(|p| p.first().map(Timeseries::from))
+        .ok_or(anyhow!("No timeseries data found!"))?;
+
+    dbg!(&data_point);
 
     Ok(())
 }
