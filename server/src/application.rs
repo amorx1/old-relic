@@ -1,11 +1,5 @@
 use serde::Deserialize;
 
-use crate::query::Query;
-
-pub static QUERY: Query = Query::Application(
-    r#"{ "query":  "{ actor { account(id: $account) { nrql(query: \"SELECT (appName, entityGuid) FROM Transaction WHERE appName LIKE '$name'\") { results } } } }" }"#,
-);
-
 #[derive(Default, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApplicationResult {
@@ -20,11 +14,11 @@ pub struct Application {
     pub entity_guid: String,
 }
 
-impl Application {
-    pub fn from_result(result: &ApplicationResult) -> Self {
+impl From<&ApplicationResult> for Application {
+    fn from(val: &ApplicationResult) -> Application {
         Application {
-            app_name: result.app_name.clone(),
-            entity_guid: result.entity_guid.clone(),
+            app_name: val.app_name.clone(),
+            entity_guid: val.entity_guid.clone(),
         }
     }
 }

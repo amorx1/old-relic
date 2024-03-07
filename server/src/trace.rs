@@ -1,11 +1,5 @@
 use serde::Deserialize;
 
-use crate::query::Query;
-
-pub static QUERY: Query = Query::Trace(
-    r#"{ "query":  "{ actor { account(id: $account) { nrql(query: \"SELECT traceId FROM Transaction WHERE entity.Guid = $entity SINCE $since\") { results } } } }" }"#,
-);
-
 #[derive(Default, Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
 pub struct TraceResult {
@@ -18,8 +12,14 @@ pub struct Trace {
     id: String,
 }
 
-impl Trace {
-    pub fn from_result(result: &TraceResult) -> Option<Self> {
-        result.trace_id.as_ref().map(|id| Trace { id: id.clone() })
+impl From<&TraceResult> for Trace {
+    fn from(val: &TraceResult) -> Trace {
+        Trace {
+            id: val
+                .trace_id
+                .as_ref()
+                .expect("ERROR: Result had no traceId")
+                .to_string(),
+        }
     }
 }

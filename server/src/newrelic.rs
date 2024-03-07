@@ -29,9 +29,3 @@ pub struct Account<T> {
 pub struct Nrql<T> {
     pub results: Vec<T>,
 }
-
-#[derive(Default, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TracingResponse<T> {
-    pub data: Data<T>,
-}

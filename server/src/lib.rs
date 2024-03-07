@@ -17,22 +17,25 @@ use reqwest::{
 pub mod application;
 pub mod newrelic;
 pub mod query;
+pub mod timeseries;
 pub mod trace;
 use serde::de::DeserializeOwned;
 
 use newrelic::QueryResponse;
-use trace::Trace;
 
-pub struct NRClient<'a> {
-    url: Option<&'a str>,
-    account: Option<&'a i64>,
-    api_key: Option<&'a str>,
+static QUERY_BASE: &str = r#"{ "query":  "{ actor { account(id: $account) { nrql(query: \"$query\") { results } } } }" }"#;
+
+#[derive(Clone)]
+pub struct NewRelicClient {
+    url: Option<String>,
+    account: Option<i64>,
+    api_key: Option<String>,
     client: Option<Client>,
 }
 
-impl<'a> NRClient<'a> {
+impl NewRelicClient {
     pub fn builder() -> Self {
-        NRClient {
+        NewRelicClient {
             url: None,
             account: None,
             api_key: None,
@@ -41,17 +44,17 @@ impl<'a> NRClient<'a> {
     }
 
     pub fn url(&mut self, url: &'static str) -> &mut Self {
-        self.url = Some(url);
+        self.url = Some(url.to_owned());
         self
     }
 
     pub fn account(&mut self, account: &'static i64) -> &mut Self {
-        self.account = Some(account);
+        self.account = Some(account.to_owned());
         self
     }
 
     pub fn api_key(&mut self, key: &'static str) -> &mut Self {
-        self.api_key = Some(key);
+        self.api_key = Some(key.to_owned());
         self
     }
 
@@ -76,26 +79,26 @@ impl<'a> NRClient<'a> {
         self
     }
 
-    pub async fn trace_metrics(traces: Vec<Trace>) {}
-
     pub async fn query<T: DeserializeOwned + std::fmt::Debug + Default>(
         &self,
-        query_str: String,
+        query_str: impl AsRef<str>,
     ) -> Option<Vec<T>> {
         // dbg!(&query_str);
 
         let response = self
             .client
             .clone()?
-            .request(Method::POST, self.url?)
+            .request(Method::POST, self.url.clone()?)
             .body(
-                query_str.replace(
-                    "$account",
-                    &self
-                        .account
-                        .expect("ERROR: No account number linked to client!")
-                        .to_string(),
-                ),
+                QUERY_BASE
+                    .replace(
+                        "$account",
+                        &self
+                            .account
+                            .expect("ERROR: No account number linked to client!")
+                            .to_string(),
+                    )
+                    .replace("$query", query_str.as_ref()),
             )
             .send()
             .await;
@@ -105,7 +108,7 @@ impl<'a> NRClient<'a> {
                 .json::<QueryResponse<T>>()
                 .await
                 .map_err(|e| anyhow!(e))
-                .unwrap_or_default();
+                .expect("ERROR: Error in response deserialization schema");
 
             // dbg!(&json);
             return Some(json.data.actor.account.nrql.results);
