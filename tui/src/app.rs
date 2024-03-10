@@ -3,7 +3,7 @@ use anyhow::anyhow;
 use chrono::{Timelike, Utc};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{backend::Backend, Frame, Terminal};
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 use tokio::io;
 
 #[derive(Clone, Copy)]
@@ -15,7 +15,7 @@ pub enum Focus {
 pub struct App {
     pub focus: Focus,
     pub backend: AppBackend,
-    pub dataset: Vec<(f64, f64)>,
+    pub datasets: BTreeMap<String, Vec<(f64, f64)>>,
 }
 
 impl App {
@@ -24,7 +24,7 @@ impl App {
         Self {
             focus: Focus::Graph,
             backend,
-            dataset: vec![],
+            datasets: BTreeMap::default(),
         }
     }
 
@@ -44,8 +44,8 @@ impl App {
                 }
             }
 
-            while let Some(points) = self.backend.data_rx.try_iter().next() {
-                self.dataset = points;
+            while let Some(datasets) = self.backend.data_rx.try_iter().next() {
+                self.datasets = datasets;
             }
         }
     }

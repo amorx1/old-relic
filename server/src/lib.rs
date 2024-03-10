@@ -19,6 +19,7 @@ pub mod newrelic;
 pub mod query;
 pub mod timeseries;
 pub mod trace;
+pub mod webtransaction;
 use serde::de::DeserializeOwned;
 
 use newrelic::QueryResponse;

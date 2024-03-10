@@ -1,7 +1,10 @@
 use chrono::{DateTime, Local};
 use ratatui::{
     prelude::*,
-    widgets::{Axis, Block, Borders, Cell, Chart, Clear, Dataset, GraphType, Paragraph, Row},
+    widgets::{
+        Axis, Block, Borders, Cell, Chart, Clear, Dataset, GraphType, Paragraph, RenderDirection,
+        Row, Sparkline,
+    },
 };
 use style::palette::tailwind;
 
@@ -20,28 +23,43 @@ pub const PALETTES: [tailwind::Palette; 9] = [
 ];
 
 pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
-    let datasets = vec![Dataset::default()
-        .name("Sample data")
-        .marker(Marker::Braille)
-        .graph_type(GraphType::Line)
-        .style(Style::default().cyan())
-        .data(&app.dataset[..])];
+    // let datasets = vec![Dataset::default()
+    //     .name("Sample data")
+    //     .marker(Marker::Braille)
+    //     .graph_type(GraphType::Line)
+    //     .style(Style::default().cyan())
+    //     .data(&app.dataset[..])];
+
+    let datasets = app
+        .datasets
+        .iter_mut()
+        .map(|(facet, points)| {
+            Dataset::default()
+                .name(facet.to_owned())
+                .data(&points[..])
+                .marker(Marker::Braille)
+                .graph_type(GraphType::Line)
+                .style(match facet.as_str() {
+                    ".NET" => Style::default().cyan(),
+                    "Elasticsearch" => Style::default().yellow(),
+                    _ => Style::default(),
+                })
+        })
+        .collect::<Vec<_>>();
 
     // Create the X axis and define its properties
     let x_axis = Axis::default()
-        .title("X Axis".red())
+        .title("Time".red())
         .style(Style::default().white())
-        .bounds([0.0, 10.0])
+        .bounds([1710036940.0, 1710038000.0])
         .labels(vec![]);
-    // .labels(vec!["0.0".into(), "5.0".into(), "10.0".into()]);
 
     // Create the Y axis and define its properties
     let y_axis = Axis::default()
-        .title("Y Axis".red())
+        .title("Transaction Time (ms)".red())
         .style(Style::default().white())
-        .bounds([0.0, 5.0])
-        .labels(vec![]);
-    // .labels(vec!["0.0".into(), "5.0".into(), "10.0".into()]);
+        .bounds([0.0, 1500.0])
+        .labels(vec!["0".into(), "750.0".into(), "1500.0".into()]);
 
     // Create the chart and link all the parts together
     let chart = Chart::new(datasets)
