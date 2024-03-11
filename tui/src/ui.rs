@@ -1,4 +1,4 @@
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, Utc};
 use ratatui::{
     prelude::*,
     widgets::{
@@ -23,51 +23,56 @@ pub const PALETTES: [tailwind::Palette; 9] = [
 ];
 
 pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
-    // let datasets = vec![Dataset::default()
-    //     .name("Sample data")
-    //     .marker(Marker::Braille)
-    //     .graph_type(GraphType::Line)
-    //     .style(Style::default().cyan())
-    //     .data(&app.dataset[..])];
+    let datasets = app.datasets.get_mut(&app.selected_query).map(|data| {
+        data.iter_mut()
+            .map(|(facet, points)| {
+                Dataset::default()
+                    .name(facet.to_owned())
+                    .data(&points[..])
+                    .marker(Marker::Braille)
+                    .graph_type(GraphType::Line)
+                    .style(match facet.as_str() {
+                        ".NET" => Style::default().cyan(),
+                        "Elasticsearch" => Style::default().yellow(),
+                        _ => Style::default(),
+                    })
+            })
+            .collect::<Vec<_>>()
+    });
 
-    let datasets = app
-        .datasets
-        .iter_mut()
-        .map(|(facet, points)| {
-            Dataset::default()
-                .name(facet.to_owned())
-                .data(&points[..])
-                .marker(Marker::Braille)
-                .graph_type(GraphType::Line)
-                .style(match facet.as_str() {
-                    ".NET" => Style::default().cyan(),
-                    "Elasticsearch" => Style::default().yellow(),
-                    _ => Style::default(),
-                })
-        })
-        .collect::<Vec<_>>();
+    let x_min = Utc::now()
+        .timestamp()
+        .checked_sub(300)
+        .expect("ERROR: Could not calculate x_min");
 
     // Create the X axis and define its properties
     let x_axis = Axis::default()
         .title("Time".red())
         .style(Style::default().white())
-        .bounds([1710036940.0, 1710038000.0])
+        .bounds([x_min as f64, Utc::now().timestamp() as f64])
         .labels(vec![]);
 
     // Create the Y axis and define its properties
     let y_axis = Axis::default()
         .title("Transaction Time (ms)".red())
         .style(Style::default().white())
-        .bounds([0.0, 1500.0])
-        .labels(vec!["0".into(), "750.0".into(), "1500.0".into()]);
+        .bounds([0.0, 100.0])
+        .labels(vec!["0".into(), "50.0".into(), "100.0".into()]);
 
-    // Create the chart and link all the parts together
-    let chart = Chart::new(datasets)
-        .block(Block::default().title("Chart"))
-        .x_axis(x_axis)
-        .y_axis(y_axis);
+    let dummy = Text::raw("Hello").style(Style::default());
 
-    frame.render_widget(chart, frame.size());
+    match datasets {
+        Some(_) => {
+            // Create the chart and link all the parts together
+            let chart = Chart::new(datasets.unwrap())
+                .block(Block::default().title("Chart"))
+                .x_axis(x_axis)
+                .y_axis(y_axis);
+            frame.render_widget(chart, frame.size());
+        }
+        None => frame.render_widget(dummy, frame.size()),
+    }
+    // frame.render_widget(chart, frame.size());
 }
 
 pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {

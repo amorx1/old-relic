@@ -10,7 +10,7 @@ pub struct WebTransactionResult {
     facet: String,
     #[serde(rename = "segmentName")]
     segment_name: String,
-    #[serde(rename = "sum.apm.service.overview.web * 1000")]
+    #[serde(rename = "sum.apm.service.overview.web")]
     value: f64,
 }
 

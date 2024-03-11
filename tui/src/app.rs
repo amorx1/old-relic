@@ -15,7 +15,8 @@ pub enum Focus {
 pub struct App {
     pub focus: Focus,
     pub backend: AppBackend,
-    pub datasets: BTreeMap<String, Vec<(f64, f64)>>,
+    pub selected_query: String,
+    pub datasets: BTreeMap<String, BTreeMap<String, Vec<(f64, f64)>>>,
 }
 
 impl App {
@@ -24,6 +25,7 @@ impl App {
         Self {
             focus: Focus::Graph,
             backend,
+            selected_query: String::new(),
             datasets: BTreeMap::default(),
         }
     }
@@ -44,8 +46,9 @@ impl App {
                 }
             }
 
-            while let Some(datasets) = self.backend.data_rx.try_iter().next() {
-                self.datasets = datasets;
+            while let Some(payload) = self.backend.data_rx.try_iter().next() {
+                self.selected_query = payload.query.to_owned();
+                self.datasets.insert(payload.query, payload.data);
             }
         }
     }

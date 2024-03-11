@@ -1213,6 +1213,7 @@ dependencies = [
  "crossterm",
  "ratatui",
  "reqwest",
+ "serde",
  "server",
  "tokio",
 ]
