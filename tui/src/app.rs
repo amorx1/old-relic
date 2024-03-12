@@ -3,6 +3,7 @@ use anyhow::anyhow;
 use chrono::{Timelike, Utc};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{backend::Backend, Frame, Terminal};
+use server::query::TimeseriesQuery;
 use std::{collections::BTreeMap, time::Duration};
 use tokio::io;
 
@@ -21,7 +22,7 @@ pub struct App {
 
 impl App {
     pub fn new(theme: usize, backend: AppBackend) -> Self {
-        backend.start();
+        // backend.start();
         Self {
             focus: Focus::Graph,
             backend,
@@ -40,6 +41,18 @@ impl App {
                     if key.kind == KeyEventKind::Press {
                         match key.code {
                             KeyCode::Char('q') => return Ok(()),
+                            KeyCode::Char('a') => {
+                                let mut query = TimeseriesQuery::default();
+                                let query = query
+                                    .from("Metric")
+                                    .select("sum(apm.service.overview.web)")
+                                    .r#where("entity.guid = 'MjU0MDc5MnxBUE18QVBQTElDQVRJT058OTI2ODAyNzcw'")
+                                    .facet("segmentName")
+                                    .since("5 minutes ago")
+                                    .until("now")
+                                    .limit("MAX");
+                                self.backend.add_timeseries(query);
+                            }
                             _ => (),
                         }
                     }

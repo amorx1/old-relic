@@ -1,35 +1,100 @@
-use std::str::FromStr;
+use anyhow::{bail, Result};
 
-pub trait Parameterized {
-    fn param(&self, p: [&str; 2]) -> String;
+pub enum QueryTypes<'a> {
+    Timeseries(TimeseriesQuery<'a>),
 }
 
-pub struct NRQL {
-    // *
-    selection: String,
-    // FROM
-    source: String,
-    // WHERE
-    condition: String,
+#[derive(Debug, Default)]
+pub struct TimeseriesQuery<'a> {
+    source: Option<&'a str>,
+    selection: Option<&'a str>,
+    r#where: Option<&'a str>,
+    facet: Option<&'a str>,
+    since: Option<&'a str>,
+    until: Option<&'a str>,
+    limit: Option<&'a str>,
 }
 
-pub struct NRQLParseError;
-static N_SELECT: usize = "SELECT".len();
+pub trait Timeseries {
+    fn timeseries(&self) -> Result<String> {
+        bail!("Default implementation should not be used!")
+    }
+}
 
-impl FromStr for NRQL {
-    type Err = NRQLParseError;
+impl<'a> Timeseries for TimeseriesQuery<'a> {
+    fn timeseries(&self) -> Result<String> {
+        let mut query = String::new();
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        //
-        let select_end = s
-            .find("SELECT")
-            .map(|idx| idx + N_SELECT + 1)
-            .ok_or(NRQLParseError)?;
+        if let Some(source) = self.source {
+            query.push_str("FROM ");
+            query.push_str(source);
+            query.push(' ');
+        }
 
-        Ok(NRQL {
-            selection: "".to_string(),
-            source: "".to_string(),
-            condition: "".to_string(),
-        })
+        if let Some(selection) = self.selection {
+            query.push_str("SELECT ");
+            query.push_str(selection);
+            query.push(' ');
+        }
+        if let Some(r#where) = self.r#where {
+            query.push_str("WHERE ");
+            query.push_str(r#where);
+            query.push(' ');
+        }
+        if let Some(facet) = self.facet {
+            query.push_str("FACET ");
+            query.push_str(facet);
+            query.push(' ');
+        }
+        if let Some(since) = self.since {
+            query.push_str("SINCE ");
+            query.push_str(since);
+            query.push(' ');
+        }
+        if let Some(until) = self.until {
+            query.push_str("UNTIL ");
+            query.push_str(until);
+            query.push(' ');
+        }
+        if let Some(limit) = self.limit {
+            query.push_str("LIMIT ");
+            query.push_str(limit);
+            query.push(' ');
+        }
+
+        query.push_str("TIMESERIES");
+
+        Ok(query.to_string())
+    }
+}
+
+impl<'a> TimeseriesQuery<'a> {
+    pub fn from(&mut self, arg: &'a str) -> &mut Self {
+        self.source = Some(arg);
+        self
+    }
+    pub fn select(&mut self, arg: &'a str) -> &mut Self {
+        self.selection = Some(arg);
+        self
+    }
+    pub fn r#where(&mut self, arg: &'a str) -> &mut Self {
+        self.r#where = Some(arg);
+        self
+    }
+    pub fn facet(&mut self, arg: &'a str) -> &mut Self {
+        self.facet = Some(arg);
+        self
+    }
+    pub fn since(&mut self, arg: &'a str) -> &mut Self {
+        self.since = Some(arg);
+        self
+    }
+    pub fn until(&mut self, arg: &'a str) -> &mut Self {
+        self.until = Some(arg);
+        self
+    }
+    pub fn limit(&mut self, arg: &'a str) -> &mut Self {
+        self.limit = Some(arg);
+        self
     }
 }
