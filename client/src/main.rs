@@ -13,7 +13,7 @@ async fn main() -> Result<()> {
     let mut query = TimeseriesQuery::default();
     let query = query
         .from("Metric")
-        .select("sum(apm.service.overview.web)")
+        .select("sum(apm.service.overview.web) as value")
         .r#where("entity.guid = 'MjU0MDc5MnxBUE18QVBQTElDQVRJT058OTI2ODAyNzcw'")
         .facet("segmentName")
         .since("5 minutes ago")

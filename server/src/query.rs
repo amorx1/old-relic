@@ -15,7 +15,7 @@ pub struct TimeseriesQuery<'a> {
     limit: Option<&'a str>,
 }
 
-pub trait Timeseries {
+pub trait Timeseries: Send + Sync {
     fn timeseries(&self) -> Result<String> {
         bail!("Default implementation should not be used!")
     }
