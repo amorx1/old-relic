@@ -61,10 +61,6 @@ impl App {
                             KeyCode::Char('e') => {
                                 self.input_mode = InputMode::Input;
                             }
-                            KeyCode::Char('a') => {
-                                let query = "FROM Metric SELECT sum(apm.service.overview.web) WHERE (appName = 'fre-consignment-api-v2-prod') FACET `segmentName` SINCE 30 minutes ago UNTIL now LIMIT MAX TIMESERIES".to_nrql().expect("ERROR: Invalid NRQL query!");
-                                self.backend.add_query(query);
-                            }
                             _ => (),
                         },
                         InputMode::Input if key.kind == KeyEventKind::Press => match key.code {

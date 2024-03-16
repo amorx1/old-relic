@@ -75,13 +75,6 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
         .bounds([0.0, 30.0])
         .labels(vec!["0".into(), "15.0".into(), "30.0".into()]);
 
-    let dummy = BigText::builder()
-        .pixel_size(PixelSize::Full)
-        .style(Style::new().blue())
-        .lines(vec!["XRELIC".dark_gray().into()])
-        .build()
-        .unwrap();
-
     match datasets {
         Some(_) => {
             // Create the chart and link all the parts together
@@ -92,6 +85,13 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
             frame.render_widget(chart, area);
         }
         None => {
+            let dummy = BigText::builder()
+                .pixel_size(PixelSize::Full)
+                .style(Style::new().blue())
+                .lines(vec!["XRELIC".dark_gray().into()])
+                .build()
+                .unwrap();
+
             let center = centered_rect(25, 25, area);
             frame.render_widget(dummy, center);
         }
