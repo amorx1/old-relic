@@ -1,9 +1,8 @@
-use crate::{backend::Backend as AppBackend, ui::render_graph};
+use crate::{backend::Backend as AppBackend, query::NRQL, ui::render_graph};
 use anyhow::anyhow;
 use chrono::{Timelike, Utc};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{backend::Backend, Frame, Terminal};
-use server::query::TimeseriesQuery;
 use std::{collections::BTreeMap, time::Duration};
 use tokio::io;
 
@@ -56,16 +55,8 @@ impl App {
                                 self.input_mode = InputMode::Input;
                             }
                             KeyCode::Char('a') => {
-                                let mut query = TimeseriesQuery::default();
-                                let query = query
-                                    .from("Metric")
-                                    .select("sum(apm.service.overview.web)")
-                                    .r#where("entity.guid = 'MjU0MDc5MnxBUE18QVBQTElDQVRJT058OTI2ODAyNzcw'")
-                                    .facet("segmentName")
-                                    .since("5 minutes ago")
-                                    .until("now")
-                                    .limit("MAX");
-                                self.backend.add_timeseries(query);
+                                let query = "FROM Metric SELECT sum(apm.service.overview.web) WHERE (appName = 'fre-consignment-api-v2-prod') FACET `segmentName` SINCE 30 minutes ago UNTIL now LIMIT MAX TIMESERIES".to_nrql().expect("ERROR: Invalid NRQL query!");
+                                self.backend.add_query(query);
                             }
                             _ => (),
                         },

@@ -1,8 +1,6 @@
 use anyhow::Result;
-use serde::Deserialize;
 use std::{
     collections::BTreeMap,
-    fmt::{self, Debug},
     sync::mpsc::{channel, Receiver, Sender},
     time::Duration,
 };
@@ -13,10 +11,11 @@ use tokio::{
 
 use chrono::{Timelike, Utc};
 use server::{
-    query::{self, Timeseries, TimeseriesQuery},
-    webtransaction::{self},
+    timeseries::{Timeseries, TimeseriesResult},
     NewRelicClient,
 };
+
+use crate::query::NRQLQuery;
 
 pub struct Payload {
     pub query: String,
@@ -57,32 +56,30 @@ impl Backend {
     //     });
     // }
 
-    pub fn add_timeseries(&self, query: &dyn Timeseries) {
+    pub fn add_query(&self, query: NRQLQuery) {
         let tx = self.data_tx.clone();
         let client = self.client.clone();
         self.runtime.spawn(async move {
-            _ = refresh(query, client, tx).await;
+            _ = refresh_timeseries(query, client, tx).await;
         });
     }
 }
 
-pub async fn refresh(
-    query: &dyn query::Timeseries,
+pub async fn refresh_timeseries(
+    query: NRQLQuery,
     client: NewRelicClient,
     data_tx: Sender<Payload>,
 ) -> Result<()> {
     loop {
         if Utc::now().second() % 2 == 0 {
-            let query = query.timeseries().unwrap();
             let data = client
-                // .query::<TimeseriesResult>("SELECT sum(newrelic.goldenmetrics.infra.awsapigatewayresourcewithmetrics.requests) AS 'Requests' FROM Metric WHERE entity.guid in ('MjU0MDc5MnxJTkZSQXxOQXw4MDE0OTk0OTg4MDIzNTAxOTQ0', 'MjU0MDc5MnxJTkZSQXxOQXw4Njc2NDEwODc3ODY4NDI2Mzcz', 'MjU0MDc5MnxJTkZSQXxOQXwtODA4OTQxNjQyMzkzODMwODg2NQ', 'MjU0MDc5MnxJTkZSQXxOQXwtMzMzMDQwNzA1ODI3MDQwODE5MA', 'MjU0MDc5MnxJTkZSQXxOQXw0NjY5MzQ3MTY5NTU5NDUyODc2', 'MjU0MDc5MnxJTkZSQXxOQXwxNTA2ODc2MTg0MjI0NTQyNjU3') FACET entity.name LIMIT MAX TIMESERIES SINCE 8 days ago UNTIL now")
-                .query::<webtransaction::TimeseriesResult>(&query)
+                .query::<TimeseriesResult>(query.to_string().unwrap())
                 .await
                 .unwrap_or_default();
 
             let mut datasets: BTreeMap<String, Vec<(f64, f64)>> = BTreeMap::default();
 
-            for data in data.into_iter().map(webtransaction::Timeseries::from) {
+            for data in data.into_iter().map(Timeseries::from) {
                 if datasets.contains_key(&data.facet) {
                     datasets
                         .get_mut(&data.facet)
@@ -96,7 +93,7 @@ pub async fn refresh(
                 }
             }
             data_tx.send(Payload {
-                query: query.clone(),
+                query: query.to_string().unwrap(),
                 data: datasets,
             })?
         }

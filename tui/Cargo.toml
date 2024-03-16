@@ -14,3 +14,4 @@ tokio = "1.36.0"
 server = { path = "../server" }
 anyhow = "1.0.80"
 serde = "1.0.197"
+nom = "7.1.3"
