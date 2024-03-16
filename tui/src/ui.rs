@@ -1,10 +1,7 @@
 use chrono::{DateTime, Local, Utc};
 use ratatui::{
     prelude::*,
-    widgets::{
-        Axis, Block, Borders, Cell, Chart, Clear, Dataset, GraphType, Paragraph, RenderDirection,
-        Row, Sparkline,
-    },
+    widgets::{Axis, Block, Borders, Chart, Dataset, GraphType, Paragraph},
 };
 use style::palette::tailwind;
 use tui_big_text::{BigText, PixelSize};
@@ -56,27 +53,35 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
             .collect::<Vec<_>>()
     });
 
-    let x_min = Utc::now()
-        .timestamp()
-        .checked_sub(300)
-        .expect("ERROR: Could not calculate x_min");
-
-    // Create the X axis and define its properties
-    let x_axis = Axis::default()
-        .title("Time".red())
-        .style(Style::default().white())
-        .bounds([x_min as f64, Utc::now().timestamp() as f64])
-        .labels(vec![]);
-
-    // Create the Y axis and define its properties
-    let y_axis = Axis::default()
-        .title("Transaction Time (ms)".red())
-        .style(Style::default().white())
-        .bounds([0.0, 30.0])
-        .labels(vec!["0".into(), "15.0".into(), "30.0".into()]);
-
     match datasets {
         Some(_) => {
+            let now = format!("{}.0", Utc::now().timestamp());
+            let bounds = app
+                .bounds
+                .get(&app.selected_query)
+                .expect("ERROR: No bounds found for selected query");
+            let (min_x, min_y) = bounds.mins;
+            let (max_x, max_y) = bounds.maxes;
+            let half_y = (max_y - min_y) / 2 as f64;
+
+            // Create the X axis and define its properties
+            let x_axis = Axis::default()
+                .title("Time".red())
+                .style(Style::default().white())
+                .bounds([min_x, Utc::now().timestamp() as f64])
+                .labels(vec![min_x.to_string().into(), now.into()]);
+
+            // Create the Y axis and define its properties
+            let y_axis = Axis::default()
+                .title("Transaction Time (ms)".red())
+                .style(Style::default().white())
+                .bounds([min_y, max_y])
+                .labels(vec![
+                    min_y.to_string().into(),
+                    half_y.to_string().into(),
+                    max_y.to_string().into(),
+                ]);
+
             // Create the chart and link all the parts together
             let chart = Chart::new(datasets.unwrap())
                 .block(Block::default().borders(Borders::ALL).title("Chart"))

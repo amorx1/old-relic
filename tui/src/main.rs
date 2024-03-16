@@ -45,6 +45,7 @@ fn main() -> io::Result<()> {
         .http_client(Client::builder());
 
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
+    terminal.show_cursor()?;
     let backend = Backend::new(client);
     let app = App::new(THEME, backend);
 

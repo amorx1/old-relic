@@ -3,10 +3,10 @@ use serde::Deserialize;
 #[derive(Default, Debug, Deserialize, PartialEq, PartialOrd)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeseriesResult {
-    begin_time_seconds: f64,
-    end_time_seconds: f64,
-    facet: String,
-    value: f64,
+    pub begin_time_seconds: f64,
+    pub end_time_seconds: f64,
+    pub facet: String,
+    pub value: f64,
 }
 
 #[derive(Debug)]

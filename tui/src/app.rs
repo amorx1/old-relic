@@ -1,5 +1,5 @@
 use crate::{
-    backend::Backend as AppBackend,
+    backend::{Backend as AppBackend, Bounds},
     query::NRQL,
     ui::{render_graph, render_query_box},
 };
@@ -33,6 +33,7 @@ pub struct App {
     pub backend: AppBackend,
     pub selected_query: String,
     pub datasets: BTreeMap<String, BTreeMap<String, Vec<(f64, f64)>>>,
+    pub bounds: BTreeMap<String, Bounds>,
 }
 
 impl App {
@@ -45,6 +46,7 @@ impl App {
             backend,
             selected_query: String::new(),
             datasets: BTreeMap::default(),
+            bounds: BTreeMap::default(),
         }
     }
 
@@ -89,6 +91,7 @@ impl App {
 
             while let Some(payload) = self.backend.data_rx.try_iter().next() {
                 self.selected_query = payload.query.to_owned();
+                self.bounds.insert(payload.query.to_owned(), payload.bounds);
                 self.datasets.insert(payload.query, payload.data);
             }
         }
@@ -116,7 +119,6 @@ impl App {
         self.cursor_position = 0;
     }
 
-    // TODO: Save entered query
     fn submit_message(&mut self) {
         let query = self.input.as_str().to_nrql().unwrap();
         self.backend.add_query(query);

@@ -17,15 +17,15 @@ use server::{
 
 use crate::query::NRQLQuery;
 
-// pub struct GraphData {
-//     mins: (f64, f64),
-//     maxes: (f64, f64)
-//     points: Vec<(f64, f64)>,
-// }
+pub struct Bounds {
+    pub mins: (f64, f64),
+    pub maxes: (f64, f64),
+}
 
 pub struct Payload {
     pub query: String,
     pub data: BTreeMap<String, Vec<(f64, f64)>>,
+    pub bounds: Bounds,
 }
 
 pub struct Backend {
@@ -68,32 +68,45 @@ pub async fn refresh_timeseries(
     data_tx: Sender<Payload>,
 ) -> Result<()> {
     loop {
-        if Utc::now().second() % 2 == 0 {
+        if Utc::now().second() % 5 == 0 {
             let data = client
                 .query::<TimeseriesResult>(query.to_string().unwrap())
                 .await
                 .unwrap_or_default();
 
-            let mut datasets: BTreeMap<String, Vec<(f64, f64)>> = BTreeMap::default();
+            let mut min_bounds: (f64, f64) = (f64::MAX, f64::MAX);
+            let mut max_bounds: (f64, f64) = (0 as f64, 0 as f64);
+
+            for point in &data {
+                min_bounds.0 = f64::min(min_bounds.0, point.end_time_seconds);
+                min_bounds.1 = f64::min(min_bounds.1, point.value);
+
+                max_bounds.0 = f64::max(max_bounds.0, point.end_time_seconds);
+                max_bounds.1 = f64::max(max_bounds.1, point.value);
+            }
+
+            let mut facets: BTreeMap<String, Vec<(f64, f64)>> = BTreeMap::default();
 
             for data in data.into_iter().map(Timeseries::from) {
-                if datasets.contains_key(&data.facet) {
-                    datasets
+                if facets.contains_key(&data.facet) {
+                    facets
                         .get_mut(&data.facet)
                         .unwrap()
-                        .push((data.begin_time_seconds, data.value));
+                        .extend_from_slice(&[(data.end_time_seconds, data.value)]);
                 } else {
-                    datasets.insert(
-                        data.facet,
-                        vec![(data.begin_time_seconds, data.end_time_seconds)],
-                    );
+                    facets.insert(data.facet, vec![(data.begin_time_seconds, data.value)]);
                 }
             }
+
             data_tx.send(Payload {
                 query: query.to_string().unwrap(),
-                data: datasets,
+                data: facets,
+                bounds: Bounds {
+                    mins: min_bounds,
+                    maxes: max_bounds,
+                },
             })?
         }
-        sleep(Duration::from_millis(50)).await;
+        sleep(Duration::from_millis(16)).await;
     }
 }
