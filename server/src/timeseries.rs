@@ -1,33 +1,27 @@
 use serde::Deserialize;
 
 #[derive(Default, Debug, Deserialize, PartialEq, PartialOrd)]
+#[serde(rename_all = "camelCase")]
 pub struct TimeseriesResult {
-    #[serde(rename = "beginTimeSeconds")]
     begin_time_seconds: f64,
-    #[serde(rename = "endTimeSeconds")]
     end_time_seconds: f64,
-    #[serde(rename = "facet")]
     facet: String,
-    #[serde(rename = "Requests")]
-    requests: f64,
-    #[serde(rename = "entity.name")]
-    entity_name: String,
+    value: f64,
 }
 
 #[derive(Debug)]
 pub struct Timeseries {
-    begin_time_seconds: f64,
-    end_time_seconds: f64,
-    facet: String,
-    requests: f64,
-    entity_name: String,
+    pub begin_time_seconds: f64,
+    pub end_time_seconds: f64,
+    pub facet: String,
+    pub value: f64,
 }
 
 impl Timeseries {
     pub fn plot(&self) -> ((f64, f64), (f64, f64)) {
         (
-            (self.begin_time_seconds, self.requests),
-            (self.end_time_seconds, self.requests),
+            (self.begin_time_seconds, self.value),
+            (self.end_time_seconds, self.value),
         )
     }
 }
@@ -38,8 +32,7 @@ impl From<TimeseriesResult> for Timeseries {
             begin_time_seconds: val.begin_time_seconds,
             end_time_seconds: val.end_time_seconds,
             facet: val.facet.clone(),
-            requests: val.requests,
-            entity_name: val.entity_name.clone(),
+            value: val.value,
         }
     }
 }

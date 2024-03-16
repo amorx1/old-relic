@@ -1,5 +1,7 @@
 mod app;
 mod backend;
+pub mod parser;
+pub mod query;
 mod ui;
 
 use app::App;
