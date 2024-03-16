@@ -6,6 +6,7 @@ use nom::{
     bytes::complete::{tag, take_until},
     IResult,
 };
+
 fn parse_timeseries(input: &str) -> IResult<&str, &str> {
     alt((tag("TIMESERIES"), tag("TABLE")))(input)
 }

@@ -7,8 +7,9 @@ use ratatui::{
     },
 };
 use style::palette::tailwind;
+use tui_big_text::{BigText, PixelSize};
 
-use crate::App;
+use crate::{app::InputMode, App};
 
 pub const PALETTES: [tailwind::Palette; 9] = [
     tailwind::BLUE,
@@ -22,6 +23,20 @@ pub const PALETTES: [tailwind::Palette; 9] = [
     tailwind::SKY,
 ];
 
+pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
+    let input = Paragraph::new(app.input.as_str())
+        .style(match app.input_mode {
+            InputMode::Normal => Style::default(),
+            InputMode::Input => Style::default().fg(Color::LightGreen),
+        })
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Enter query: "),
+        );
+    frame.render_widget(input, area);
+}
+
 pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
     let datasets = app.datasets.get_mut(&app.selected_query).map(|data| {
         data.iter_mut()
@@ -34,6 +49,7 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
                     .style(match facet.as_str() {
                         ".NET" => Style::default().cyan(),
                         "Elasticsearch" => Style::default().yellow(),
+                        "Web external" => Style::default().light_red(),
                         _ => Style::default(),
                     })
             })
@@ -56,21 +72,29 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
     let y_axis = Axis::default()
         .title("Transaction Time (ms)".red())
         .style(Style::default().white())
-        .bounds([0.0, 100.0])
-        .labels(vec!["0".into(), "50.0".into(), "100.0".into()]);
+        .bounds([0.0, 30.0])
+        .labels(vec!["0".into(), "15.0".into(), "30.0".into()]);
 
-    let dummy = Text::raw("Hello").style(Style::default());
+    let dummy = BigText::builder()
+        .pixel_size(PixelSize::Full)
+        .style(Style::new().blue())
+        .lines(vec!["XRELIC".dark_gray().into()])
+        .build()
+        .unwrap();
 
     match datasets {
         Some(_) => {
             // Create the chart and link all the parts together
             let chart = Chart::new(datasets.unwrap())
-                .block(Block::default().title("Chart"))
+                .block(Block::default().borders(Borders::ALL).title("Chart"))
                 .x_axis(x_axis)
                 .y_axis(y_axis);
-            frame.render_widget(chart, frame.size());
+            frame.render_widget(chart, area);
         }
-        None => frame.render_widget(dummy, frame.size()),
+        None => {
+            let center = centered_rect(25, 25, area);
+            frame.render_widget(dummy, center);
+        }
     }
     // frame.render_widget(chart, frame.size());
 }

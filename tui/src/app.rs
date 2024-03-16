@@ -1,8 +1,16 @@
-use crate::{backend::Backend as AppBackend, query::NRQL, ui::render_graph};
+use crate::{
+    backend::Backend as AppBackend,
+    query::NRQL,
+    ui::{render_graph, render_query_box},
+};
 use anyhow::anyhow;
 use chrono::{Timelike, Utc};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use ratatui::{backend::Backend, Frame, Terminal};
+use ratatui::{
+    backend::Backend,
+    layout::{Constraint, Layout},
+    Frame, Terminal,
+};
 use std::{collections::BTreeMap, time::Duration};
 use tokio::io;
 
@@ -29,7 +37,6 @@ pub struct App {
 
 impl App {
     pub fn new(theme: usize, backend: AppBackend) -> Self {
-        // backend.start();
         Self {
             input: String::new(),
             input_mode: InputMode::Normal,
@@ -93,13 +100,15 @@ impl App {
 
     pub fn ui(&mut self, frame: &mut Frame) {
         let area = frame.size();
+        let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(20)]);
+        let [input_area, graph_area] = vertical.areas(area);
 
+        render_query_box(self, frame, input_area);
         match self.focus {
-            // Alert for upcoming event
             Focus::Graph => {
-                render_graph(self, frame, area);
+                render_graph(self, frame, graph_area);
             }
-            _ => todo!(), // Detailed view for selected event
+            _ => todo!(),
         }
     }
 
@@ -113,7 +122,8 @@ impl App {
 
     // TODO: Save entered query
     fn submit_message(&mut self) {
-        // self.messages.push(self.input.clone());
+        let query = self.input.as_str().to_nrql().unwrap();
+        self.backend.add_query(query);
         self.input.clear();
         self.reset_cursor();
     }

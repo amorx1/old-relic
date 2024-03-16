@@ -17,6 +17,12 @@ use server::{
 
 use crate::query::NRQLQuery;
 
+// pub struct GraphData {
+//     mins: (f64, f64),
+//     maxes: (f64, f64)
+//     points: Vec<(f64, f64)>,
+// }
+
 pub struct Payload {
     pub query: String,
     pub data: BTreeMap<String, Vec<(f64, f64)>>,
@@ -46,15 +52,6 @@ impl Backend {
             data_rx,
         }
     }
-
-    // pub fn start(&self) {
-    //     println!("Backend starting ...");
-    //     let tx = self.data_tx.clone();
-    //     let client = self.client.clone();
-    //     self.runtime.spawn(async move {
-    //         _ = refresh(client, tx).await;
-    //     });
-    // }
 
     pub fn add_query(&self, query: NRQLQuery) {
         let tx = self.data_tx.clone();
@@ -97,6 +94,6 @@ pub async fn refresh_timeseries(
                 data: datasets,
             })?
         }
-        sleep(Duration::from_millis(16)).await;
+        sleep(Duration::from_millis(50)).await;
     }
 }
