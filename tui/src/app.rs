@@ -1,7 +1,7 @@
 use crate::{
     backend::{Backend as AppBackend, Bounds},
     query::NRQL,
-    ui::{render_graph, render_query_box},
+    ui::{render_graph, render_query_box, render_query_list},
 };
 use anyhow::anyhow;
 use chrono::{Timelike, Utc};
@@ -9,15 +9,19 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     backend::Backend,
     layout::{Constraint, Layout},
+    widgets::ListState,
     Frame, Terminal,
 };
-use std::{collections::BTreeMap, time::Duration};
+use std::{
+    collections::{BTreeMap, HashSet},
+    time::Duration,
+};
 use tokio::io;
 
 #[derive(Clone, Copy)]
 pub enum Focus {
     Graph,
-    Popup,
+    QueryList,
 }
 
 pub enum InputMode {
@@ -32,6 +36,8 @@ pub struct App {
     pub focus: Focus,
     pub backend: AppBackend,
     pub selected_query: String,
+    // pub queries: HashSet<String>,
+    pub list_state: ListState,
     pub datasets: BTreeMap<String, BTreeMap<String, Vec<(f64, f64)>>>,
     pub bounds: BTreeMap<String, Bounds>,
 }
@@ -45,6 +51,8 @@ impl App {
             focus: Focus::Graph,
             backend,
             selected_query: String::new(),
+            // queries: HashSet::from(["Query 1".into(), "Query 2".into(), "Query 3".into()]),
+            list_state: ListState::default(),
             datasets: BTreeMap::default(),
             bounds: BTreeMap::default(),
         }
@@ -63,6 +71,8 @@ impl App {
                             KeyCode::Char('e') => {
                                 self.input_mode = InputMode::Input;
                             }
+                            KeyCode::Char('j') => self.next(),
+                            KeyCode::Char('k') => self.previous(),
                             _ => (),
                         },
                         InputMode::Input if key.kind == KeyEventKind::Press => match key.code {
@@ -90,7 +100,7 @@ impl App {
             }
 
             while let Some(payload) = self.backend.data_rx.try_iter().next() {
-                self.selected_query = payload.query.to_owned();
+                // TODO: Fix selection
                 self.bounds.insert(payload.query.to_owned(), payload.bounds);
                 self.datasets.insert(payload.query, payload.data);
             }
@@ -99,10 +109,14 @@ impl App {
 
     pub fn ui(&mut self, frame: &mut Frame) {
         let area = frame.size();
+        // TODO: Possible to pre-compute?
+        let horizontal = Layout::horizontal([Constraint::Percentage(15), Constraint::Min(20)]);
         let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(20)]);
-        let [input_area, graph_area] = vertical.areas(area);
+        let [input_area, rest] = vertical.areas(area);
+        let [list_area, graph_area] = horizontal.areas(rest);
 
         render_query_box(self, frame, input_area);
+        render_query_list(self, frame, list_area);
         match self.focus {
             Focus::Graph => {
                 render_graph(self, frame, graph_area);
@@ -176,31 +190,43 @@ impl App {
     //         .expect("ERROR: Could not send command to Zellij");
     // }
 
-    // pub fn next(&mut self) {
-    //     let i = match self.table_state.selected() {
-    //         Some(i) => {
-    //             if i >= self.events.len() - 1 {
-    //                 0
-    //             } else {
-    //                 i + 1
-    //             }
-    //         }
-    //         None => 0,
-    //     };
-    //     self.table_state.select(Some(i));
-    // }
+    pub fn next(&mut self) {
+        let i = match self.list_state.selected() {
+            Some(i) => {
+                if i >= self.datasets.len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.list_state.select(Some(i));
+        self.selected_query = self
+            .datasets
+            .keys()
+            .nth(i)
+            .expect("ERROR: Could not select query!")
+            .to_owned();
+    }
 
-    // pub fn previous(&mut self) {
-    //     let i = match self.table_state.selected() {
-    //         Some(i) => {
-    //             if i == 0 {
-    //                 self.events.len() - 1
-    //             } else {
-    //                 i - 1
-    //             }
-    //         }
-    //         None => 0,
-    //     };
-    //     self.table_state.select(Some(i));
-    // }
+    pub fn previous(&mut self) {
+        let i = match self.list_state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    self.datasets.len() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.list_state.select(Some(i));
+        self.selected_query = self
+            .datasets
+            .keys()
+            .nth(i)
+            .expect("ERROR: Could not select query!")
+            .to_owned();
+    }
 }

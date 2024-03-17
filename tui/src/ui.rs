@@ -1,7 +1,9 @@
+use std::sync::Arc;
+
 use chrono::{DateTime, Local, Utc};
 use ratatui::{
     prelude::*,
-    widgets::{Axis, Block, Borders, Chart, Dataset, GraphType, Paragraph},
+    widgets::{Axis, Block, Borders, Chart, Dataset, GraphType, List, Paragraph},
 };
 use style::palette::tailwind;
 use tui_big_text::{BigText, PixelSize};
@@ -19,6 +21,22 @@ pub const PALETTES: [tailwind::Palette; 9] = [
     tailwind::FUCHSIA,
     tailwind::SKY,
 ];
+
+pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
+    let items = app.datasets.keys().cloned().collect::<Vec<_>>();
+    // let items = app.queries.clone().into_iter().collect::<Vec<_>>();
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Active Queries"),
+        )
+        .highlight_style(Style::new().add_modifier(Modifier::REVERSED))
+        .highlight_symbol(">>")
+        .repeat_highlight_symbol(true);
+
+    frame.render_stateful_widget(list, area, &mut app.list_state);
+}
 
 pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
     let input = Paragraph::new(app.input.as_str())
@@ -75,7 +93,7 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
             let y_axis = Axis::default()
                 .title("Transaction Time (ms)".red())
                 .style(Style::default().white())
-                .bounds([min_y, max_y])
+                .bounds([f64::round(min_y), f64::round(max_y)])
                 .labels(vec![
                     min_y.to_string().into(),
                     half_y.to_string().into(),
@@ -93,11 +111,11 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
             let dummy = BigText::builder()
                 .pixel_size(PixelSize::Full)
                 .style(Style::new().blue())
-                .lines(vec!["XRELIC".dark_gray().into()])
+                .lines(vec!["XRELIC".light_green().into()])
                 .build()
                 .unwrap();
 
-            let center = centered_rect(25, 25, area);
+            let center = centered_rect(30, 30, area);
             frame.render_widget(dummy, center);
         }
     }
