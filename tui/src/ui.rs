@@ -78,9 +78,13 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
                 .bounds
                 .get(&app.selected_query)
                 .expect("ERROR: No bounds found for selected query");
-            let (min_x, min_y) = bounds.mins;
-            let (max_x, max_y) = bounds.maxes;
-            let half_y = (max_y - min_y) / 2 as f64;
+            let (min_x, mut min_y) = bounds.mins;
+            let (max_x, mut max_y) = bounds.maxes;
+            let mut half_y = (max_y - min_y) / 2 as f64;
+
+            min_y = f64::round(min_y);
+            max_y = f64::round(max_y);
+            half_y = f64::round(half_y);
 
             // Create the X axis and define its properties
             let x_axis = Axis::default()
@@ -93,7 +97,7 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
             let y_axis = Axis::default()
                 .title("Transaction Time (ms)".red())
                 .style(Style::default().white())
-                .bounds([f64::round(min_y), f64::round(max_y)])
+                .bounds([min_y, max_y])
                 .labels(vec![
                     min_y.to_string().into(),
                     half_y.to_string().into(),

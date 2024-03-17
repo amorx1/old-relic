@@ -88,13 +88,17 @@ pub async fn refresh_timeseries(
             let mut facets: BTreeMap<String, Vec<(f64, f64)>> = BTreeMap::default();
 
             for data in data.into_iter().map(Timeseries::from) {
-                if facets.contains_key(&data.facet) {
+                let facet = &data.facet.unwrap_or(String::new());
+                if facets.contains_key(facet) {
                     facets
-                        .get_mut(&data.facet)
+                        .get_mut(facet)
                         .unwrap()
                         .extend_from_slice(&[(data.end_time_seconds, data.value)]);
                 } else {
-                    facets.insert(data.facet, vec![(data.begin_time_seconds, data.value)]);
+                    facets.insert(
+                        facet.to_owned(),
+                        vec![(data.begin_time_seconds, data.value)],
+                    );
                 }
             }
 

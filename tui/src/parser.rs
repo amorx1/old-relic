@@ -33,7 +33,7 @@ fn parse_facet(input: &str) -> IResult<&str, &str> {
 
 fn parse_where(input: &str) -> IResult<&str, &str> {
     let (remainder, _) = tag("WHERE")(input)?;
-    take_until("FACET")(remainder)
+    alt((take_until("FACET"), take_until("SINCE")))(remainder)
 }
 
 fn parse_select(input: &str) -> IResult<&str, &str> {
@@ -50,7 +50,7 @@ pub fn parse_nrql(input: &str) -> Result<HashMap<String, String>> {
     let (remainder, from) = parse_from(input).unwrap();
     let (remainder, select) = parse_select(remainder).unwrap();
     let (remainder, r#where) = parse_where(remainder).unwrap();
-    let (remainder, facet) = parse_facet(remainder).unwrap();
+    let (remainder, facet) = parse_facet(remainder).unwrap_or((remainder, ""));
     let (remainder, since) = parse_since(remainder).unwrap();
     let (remainder, until) = parse_until(remainder).unwrap();
     let (remainder, limit) = parse_limit(remainder).unwrap();

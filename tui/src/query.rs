@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use anyhow::Result;
 use serde::Deserialize;
 
@@ -25,17 +27,29 @@ pub struct NRQLQuery {
 
 impl NRQLQuery {
     pub fn to_string(&self) -> Result<String> {
-        let query = format!(
-            "FROM {} SELECT {} as value WHERE {} FACET {} SINCE {} UNTIL {} LIMIT {} {}",
-            self.from,
-            self.select,
-            self.r#where,
-            self.facet,
-            self.since,
-            self.until,
-            self.limit,
-            self.mode
-        );
+        let mut query = String::new();
+        query += format!("FROM {} ", self.from).as_str();
+        query += format!("SELECT {} as value ", self.select).as_str();
+        query += format!("WHERE {} ", self.r#where).as_str();
+        if !String::is_empty(&self.facet) {
+            query += format!("FACET {} ", self.facet).as_str();
+        }
+        query += format!("SINCE {} ", self.since).as_str();
+        query += format!("UNTIL {} ", self.until).as_str();
+        query += format!("LIMIT {} ", self.limit).as_str();
+        query += format!("{}", self.mode).as_str();
+
+        // let query = format!(
+        //     "FROM {} SELECT {} as value WHERE {} FACET {} SINCE {} UNTIL {} LIMIT {} {}",
+        //     self.from,
+        //     self.select,
+        //     self.r#where,
+        //     self.facet,
+        //     self.since,
+        //     self.until,
+        //     self.limit,
+        //     self.mode
+        // );
 
         Ok(query.to_string())
     }

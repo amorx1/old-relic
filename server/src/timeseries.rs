@@ -5,7 +5,7 @@ use serde::Deserialize;
 pub struct TimeseriesResult {
     pub begin_time_seconds: f64,
     pub end_time_seconds: f64,
-    pub facet: String,
+    pub facet: Option<String>,
     pub value: f64,
 }
 
@@ -13,7 +13,7 @@ pub struct TimeseriesResult {
 pub struct Timeseries {
     pub begin_time_seconds: f64,
     pub end_time_seconds: f64,
-    pub facet: String,
+    pub facet: Option<String>,
     pub value: f64,
 }
 
