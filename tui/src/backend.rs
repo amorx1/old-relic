@@ -88,7 +88,7 @@ pub async fn refresh_timeseries(
             let mut facets: BTreeMap<String, Vec<(f64, f64)>> = BTreeMap::default();
 
             for data in data.into_iter().map(Timeseries::from) {
-                let facet = &data.facet.unwrap_or(String::new());
+                let facet = &data.facet.unwrap_or(String::from("value"));
                 if facets.contains_key(facet) {
                     facets
                         .get_mut(facet)
