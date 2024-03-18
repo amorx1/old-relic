@@ -73,6 +73,7 @@ impl App {
                             }
                             KeyCode::Char('j') => self.next(),
                             KeyCode::Char('k') => self.previous(),
+                            KeyCode::Char('x') => self.delete(),
                             _ => (),
                         },
                         InputMode::Input if key.kind == KeyEventKind::Press => match key.code {
@@ -208,6 +209,19 @@ impl App {
             .nth(i)
             .expect("ERROR: Could not select query!")
             .to_owned();
+    }
+
+    pub fn delete(&mut self) {
+        let i = self.list_state.selected().unwrap();
+        let to_delete = self
+            .datasets
+            .keys()
+            .cloned()
+            .nth(i)
+            .expect("ERROR: Could not index query for deletion!");
+
+        let (removed, _) = self.datasets.remove_entry(&to_delete).unwrap();
+        self.backend.ui_tx.send(removed);
     }
 
     pub fn previous(&mut self) {

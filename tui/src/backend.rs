@@ -10,6 +10,7 @@ use tokio::{
 };
 
 use chrono::{Timelike, Utc};
+use crossbeam_channel::{unbounded, Receiver as MReceiver, Sender as MSender};
 use server::{
     timeseries::{Timeseries, TimeseriesResult},
     NewRelicClient,
@@ -33,11 +34,14 @@ pub struct Backend {
     pub runtime: Runtime,
     pub data_tx: Sender<Payload>,
     pub data_rx: Receiver<Payload>,
+    pub ui_tx: MSender<String>,
+    pub ui_rx: MReceiver<String>,
 }
 
 impl Backend {
     pub fn new(client: NewRelicClient) -> Self {
         let (data_tx, data_rx) = channel::<Payload>();
+        let (ui_tx, ui_rx) = unbounded();
         let runtime = runtime::Builder::new_multi_thread()
             .worker_threads(1)
             .thread_name("data")
@@ -50,14 +54,17 @@ impl Backend {
             runtime,
             data_tx,
             data_rx,
+            ui_tx,
+            ui_rx,
         }
     }
 
     pub fn add_query(&self, query: NRQLQuery) {
         let tx = self.data_tx.clone();
+        let rx = self.ui_rx.clone();
         let client = self.client.clone();
         self.runtime.spawn(async move {
-            _ = refresh_timeseries(query, client, tx).await;
+            _ = refresh_timeseries(query, client, tx, rx).await;
         });
     }
 }
@@ -66,8 +73,14 @@ pub async fn refresh_timeseries(
     query: NRQLQuery,
     client: NewRelicClient,
     data_tx: Sender<Payload>,
+    ui_rx: MReceiver<String>,
 ) -> Result<()> {
     loop {
+        while let Some(q) = ui_rx.try_iter().next() {
+            if query.to_string().unwrap() == q {
+                return Ok(());
+            }
+        }
         if Utc::now().second() % 5 == 0 {
             let data = client
                 .query::<TimeseriesResult>(query.to_string().unwrap())

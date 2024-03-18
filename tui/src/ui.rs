@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Local, NaiveDateTime, Utc};
 use ratatui::{
     prelude::*,
     widgets::{Axis, Block, Borders, Chart, Dataset, GraphType, List, Paragraph},
@@ -91,7 +91,16 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
                 .title("Time".red())
                 .style(Style::default().white())
                 .bounds([min_x, Utc::now().timestamp() as f64])
-                .labels(vec![min_x.to_string().into(), now.into()]);
+                .labels(vec![
+                    DateTime::from_timestamp(min_x as i64, 0)
+                        .unwrap()
+                        .to_string()
+                        .into(),
+                    DateTime::from_timestamp(Utc::now().timestamp() as i64, 0)
+                        .unwrap()
+                        .to_string()
+                        .into(),
+                ]);
 
             // Create the Y axis and define its properties
             let y_axis = Axis::default()
