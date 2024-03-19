@@ -1,7 +1,7 @@
 use crate::{
     backend::{Backend as AppBackend, Bounds},
     query::NRQL,
-    ui::{render_graph, render_query_box, render_query_list},
+    ui::{render_graph, render_query_box, render_query_list, render_rename_dialog},
 };
 use anyhow::anyhow;
 use chrono::{Timelike, Utc};
@@ -13,15 +13,16 @@ use ratatui::{
     Frame, Terminal,
 };
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     time::Duration,
 };
 use tokio::io;
 
 #[derive(Clone, Copy)]
 pub enum Focus {
-    Graph,
-    QueryList,
+    QueryInput,
+    Rename,
+    Default,
 }
 
 pub enum InputMode {
@@ -29,14 +30,21 @@ pub enum InputMode {
     Input,
 }
 
-pub struct App {
-    pub input: String,
-    pub input_mode: InputMode,
+pub struct Input {
+    pub buffer: String,
     pub cursor_position: usize,
+}
+
+pub struct App {
+    // pub input: String,
+    pub inputs: BTreeMap<String, Input>,
+    pub input_mode: InputMode,
+    pub show_rename_dialog: bool,
+    // pub cursor_position: usize,
     pub focus: Focus,
     pub backend: AppBackend,
     pub selected_query: String,
-    // pub queries: HashSet<String>,
+    pub query_name_map: HashMap<String, String>,
     pub list_state: ListState,
     pub datasets: BTreeMap<String, BTreeMap<String, Vec<(f64, f64)>>>,
     pub bounds: BTreeMap<String, Bounds>,
@@ -45,13 +53,30 @@ pub struct App {
 impl App {
     pub fn new(theme: usize, backend: AppBackend) -> Self {
         Self {
-            input: String::new(),
+            // input: String::new(),
+            inputs: BTreeMap::from([
+                (
+                    "query".to_owned(),
+                    Input {
+                        buffer: String::new(),
+                        cursor_position: 0,
+                    },
+                ),
+                (
+                    "rename".to_owned(),
+                    Input {
+                        buffer: String::new(),
+                        cursor_position: 0,
+                    },
+                ),
+            ]),
             input_mode: InputMode::Normal,
-            cursor_position: 0,
-            focus: Focus::Graph,
+            show_rename_dialog: false,
+            // cursor_position: 0,
+            focus: Focus::Default,
             backend,
             selected_query: String::new(),
-            // queries: HashSet::from(["Query 1".into(), "Query 2".into(), "Query 3".into()]),
+            query_name_map: HashMap::default(),
             list_state: ListState::default(),
             datasets: BTreeMap::default(),
             bounds: BTreeMap::default(),
@@ -65,30 +90,71 @@ impl App {
             // Manual event handlers.
             if let Ok(true) = event::poll(Duration::from_millis(50)) {
                 if let Event::Key(key) = event::read()? {
+                    let buffer = match self.focus {
+                        Focus::QueryInput => "query",
+                        Focus::Rename => "rename",
+                        _ => "",
+                    };
                     match self.input_mode {
                         InputMode::Normal if key.kind == KeyEventKind::Press => match key.code {
                             KeyCode::Char('q') => return Ok(()),
                             KeyCode::Char('e') => {
+                                self.focus = Focus::QueryInput;
                                 self.input_mode = InputMode::Input;
                             }
                             KeyCode::Char('j') => self.next(),
                             KeyCode::Char('k') => self.previous(),
                             KeyCode::Char('x') => self.delete(),
+                            KeyCode::Char('r') => {
+                                self.focus = Focus::Rename;
+                                self.input_mode = InputMode::Input;
+                            }
                             _ => (),
                         },
                         InputMode::Input if key.kind == KeyEventKind::Press => match key.code {
-                            KeyCode::Enter => self.submit_message(),
+                            KeyCode::Enter => {
+                                // self.submit(buffer);
+                                if buffer == "query" {
+                                    self.backend.add_query(
+                                        self.inputs
+                                            .get(buffer)
+                                            .unwrap()
+                                            .buffer
+                                            .as_str()
+                                            .to_nrql()
+                                            .unwrap(),
+                                    );
+                                    self.inputs.get_mut(buffer).unwrap().buffer.clear();
+                                    self.reset_cursor(buffer);
+                                    self.focus = Focus::Default;
+                                    self.input_mode = InputMode::Normal;
+                                } else if buffer == "rename" {
+                                    self.query_name_map
+                                        .entry(self.selected_query.to_owned())
+                                        .and_modify(|v| {
+                                            *v = self.inputs.get(buffer).unwrap().buffer.to_owned();
+                                        });
+                                    println!(
+                                        "RENAMED TO: {}",
+                                        self.query_name_map.get(&self.selected_query).unwrap()
+                                    );
+                                    self.inputs.get_mut(buffer).unwrap().buffer.clear();
+                                    self.reset_cursor(buffer);
+                                    self.focus = Focus::Default;
+                                    self.input_mode = InputMode::Normal;
+                                }
+                            }
                             KeyCode::Char(to_insert) => {
-                                self.enter_char(to_insert);
+                                self.enter_char(buffer, to_insert);
                             }
                             KeyCode::Backspace => {
-                                self.delete_char();
+                                self.delete_char(buffer);
                             }
                             KeyCode::Left => {
-                                self.move_cursor_left();
+                                self.move_cursor_left(buffer);
                             }
                             KeyCode::Right => {
-                                self.move_cursor_right();
+                                self.move_cursor_right(buffer);
                             }
                             KeyCode::Esc => {
                                 self.input_mode = InputMode::Normal;
@@ -103,6 +169,9 @@ impl App {
             while let Some(payload) = self.backend.data_rx.try_iter().next() {
                 // TODO: Fix selection
                 self.bounds.insert(payload.query.to_owned(), payload.bounds);
+                self.query_name_map
+                    .entry(payload.query.to_owned())
+                    .or_insert_with(|| payload.query.to_owned());
                 self.datasets.insert(payload.query, payload.data);
             }
         }
@@ -119,63 +188,91 @@ impl App {
         render_query_box(self, frame, input_area);
         render_query_list(self, frame, list_area);
         match self.focus {
-            Focus::Graph => {
+            Focus::Default | Focus::QueryInput => {
                 render_graph(self, frame, graph_area);
             }
-            _ => todo!(),
+            Focus::Rename => {
+                render_rename_dialog(self, frame, graph_area);
+            }
         }
     }
 
-    fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
-        new_cursor_pos.clamp(0, self.input.len())
+    fn clamp_cursor(&self, buffer: &str, new_cursor_pos: usize) -> usize {
+        new_cursor_pos.clamp(0, self.inputs.get(buffer).unwrap().buffer.len())
     }
 
-    fn reset_cursor(&mut self) {
-        self.cursor_position = 0;
+    fn reset_cursor(&mut self, buffer: &str) {
+        self.inputs.get_mut(buffer).unwrap().cursor_position = 0;
     }
 
-    fn submit_message(&mut self) {
-        let query = self.input.as_str().to_nrql().unwrap();
-        self.backend.add_query(query);
-        self.input.clear();
-        self.reset_cursor();
+    // fn submit(&mut self, buffer: &str) {
+    //     let query = self
+    //         .inputs
+    //         .get(buffer)
+    //         .unwrap()
+    //         .buffer
+    //         .as_str()
+    //         .to_nrql()
+    //         .unwrap();
+    // }
+
+    fn move_cursor_left(&mut self, buffer: &str) {
+        let cursor_moved_left = self
+            .inputs
+            .get(buffer)
+            .unwrap()
+            .cursor_position
+            .saturating_sub(1);
+        self.inputs.get_mut(buffer).unwrap().cursor_position =
+            self.clamp_cursor(buffer, cursor_moved_left);
     }
 
-    fn move_cursor_left(&mut self) {
-        let cursor_moved_left = self.cursor_position.saturating_sub(1);
-        self.cursor_position = self.clamp_cursor(cursor_moved_left);
+    fn move_cursor_right(&mut self, buffer: &str) {
+        let cursor_moved_right = self
+            .inputs
+            .get(buffer)
+            .unwrap()
+            .cursor_position
+            .saturating_add(1);
+        self.inputs.get_mut(buffer).unwrap().cursor_position =
+            self.clamp_cursor(buffer, cursor_moved_right);
     }
 
-    fn move_cursor_right(&mut self) {
-        let cursor_moved_right = self.cursor_position.saturating_add(1);
-        self.cursor_position = self.clamp_cursor(cursor_moved_right);
+    fn enter_char(&mut self, buffer: &str, new_char: char) {
+        let cursor_position = self.inputs.get(buffer).unwrap().cursor_position;
+        self.inputs
+            .get_mut(buffer)
+            .unwrap()
+            .buffer
+            .insert(cursor_position, new_char);
+
+        self.move_cursor_right(buffer);
     }
 
-    fn enter_char(&mut self, new_char: char) {
-        self.input.insert(self.cursor_position, new_char);
-
-        self.move_cursor_right();
-    }
-
-    fn delete_char(&mut self) {
-        let is_not_cursor_leftmost = self.cursor_position != 0;
+    fn delete_char(&mut self, buffer: &str) {
+        let is_not_cursor_leftmost = self.inputs.get(buffer).unwrap().cursor_position != 0;
         if is_not_cursor_leftmost {
-            // Method "remove" is not used on the saved text for deleting the selected char.
-            // Reason: Using remove on String works on bytes instead of the chars.
-            // Using remove would require special care because of char boundaries.
-
-            let current_index = self.cursor_position;
+            let current_index = self.inputs.get(buffer).unwrap().cursor_position;
             let from_left_to_current_index = current_index - 1;
 
-            // Getting all characters before the selected character.
-            let before_char_to_delete = self.input.chars().take(from_left_to_current_index);
-            // Getting all characters after selected character.
-            let after_char_to_delete = self.input.chars().skip(current_index);
+            let before_char_to_delete = self
+                .inputs
+                .get(buffer)
+                .unwrap()
+                .buffer
+                .chars()
+                .take(from_left_to_current_index);
+            let after_char_to_delete = self
+                .inputs
+                .get(buffer)
+                .unwrap()
+                .buffer
+                .chars()
+                .skip(current_index);
 
-            // Put all characters together except the selected one.
-            // By leaving the selected one out, it is forgotten and therefore deleted.
-            self.input = before_char_to_delete.chain(after_char_to_delete).collect();
-            self.move_cursor_left();
+            self.inputs.get_mut(buffer).unwrap().buffer =
+                before_char_to_delete.chain(after_char_to_delete).collect();
+            self.move_cursor_left(buffer);
         }
     }
 
@@ -183,13 +280,18 @@ impl App {
     //     self.focus = focus;
     // }
 
-    // pub fn popup(&mut self) {
-    //     self.focus = Focus::Popup;
-    //     _ = Command::new("zellij")
-    //         .args(["action", "toggle-floating-panes"])
-    //         .status()
-    //         .expect("ERROR: Could not send command to Zellij");
-    // }
+    pub fn delete(&mut self) {
+        let i = self.list_state.selected().unwrap();
+        let to_delete = self
+            .datasets
+            .keys()
+            .cloned()
+            .nth(i)
+            .expect("ERROR: Could not index query for deletion!");
+
+        let (removed, _) = self.datasets.remove_entry(&to_delete).unwrap();
+        self.backend.ui_tx.send(removed);
+    }
 
     pub fn next(&mut self) {
         let i = match self.list_state.selected() {
@@ -209,19 +311,6 @@ impl App {
             .nth(i)
             .expect("ERROR: Could not select query!")
             .to_owned();
-    }
-
-    pub fn delete(&mut self) {
-        let i = self.list_state.selected().unwrap();
-        let to_delete = self
-            .datasets
-            .keys()
-            .cloned()
-            .nth(i)
-            .expect("ERROR: Could not index query for deletion!");
-
-        let (removed, _) = self.datasets.remove_entry(&to_delete).unwrap();
-        self.backend.ui_tx.send(removed);
     }
 
     pub fn previous(&mut self) {
