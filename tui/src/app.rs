@@ -115,15 +115,11 @@ impl App {
                             KeyCode::Enter => {
                                 // self.submit(buffer);
                                 if buffer == "query" {
-                                    self.backend.add_query(
-                                        self.inputs
-                                            .get(buffer)
-                                            .unwrap()
-                                            .buffer
-                                            .as_str()
-                                            .to_nrql()
-                                            .unwrap(),
-                                    );
+                                    if let Ok(query) =
+                                        self.inputs.get(buffer).unwrap().buffer.as_str().to_nrql()
+                                    {
+                                        self.backend.add_query(query);
+                                    }
                                     self.inputs.get_mut(buffer).unwrap().buffer.clear();
                                     self.reset_cursor(buffer);
                                     self.focus = Focus::Default;

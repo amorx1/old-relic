@@ -39,25 +39,13 @@ impl NRQLQuery {
         query += format!("LIMIT {} ", self.limit).as_str();
         query += format!("{}", self.mode).as_str();
 
-        // let query = format!(
-        //     "FROM {} SELECT {} as value WHERE {} FACET {} SINCE {} UNTIL {} LIMIT {} {}",
-        //     self.from,
-        //     self.select,
-        //     self.r#where,
-        //     self.facet,
-        //     self.since,
-        //     self.until,
-        //     self.limit,
-        //     self.mode
-        // );
-
         Ok(query.to_string())
     }
 }
 
 impl NRQL for &str {
     fn to_nrql(self) -> Result<NRQLQuery> {
-        let parts = parse_nrql(self).expect("ERROR: Could not parse NRQL query");
+        let parts = parse_nrql(self)?;
         let mut nrql = NRQLQuery::default();
         parts.iter().for_each(|(key, value)| match key.as_ref() {
             "FROM" => nrql.from = value.to_owned(),

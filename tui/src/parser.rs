@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 
 use nom::{
@@ -47,13 +47,13 @@ fn parse_from(input: &str) -> IResult<&str, &str> {
 }
 
 pub fn parse_nrql(input: &str) -> Result<HashMap<String, String>> {
-    let (remainder, from) = parse_from(input).unwrap();
-    let (remainder, select) = parse_select(remainder).unwrap();
-    let (remainder, r#where) = parse_where(remainder).unwrap();
+    let (remainder, from) = parse_from(input).map_err(|_| anyhow!("Parsing Error!"))?;
+    let (remainder, select) = parse_select(remainder).map_err(|_| anyhow!("Parsing Error!"))?;
+    let (remainder, r#where) = parse_where(remainder).map_err(|_| anyhow!("Parsing Error!"))?;
     let (remainder, facet) = parse_facet(remainder).unwrap_or((remainder, ""));
-    let (remainder, since) = parse_since(remainder).unwrap();
-    let (remainder, until) = parse_until(remainder).unwrap();
-    let (remainder, limit) = parse_limit(remainder).unwrap();
+    let (remainder, since) = parse_since(remainder).map_err(|_| anyhow!("Parsing Error!"))?;
+    let (remainder, until) = parse_until(remainder).map_err(|_| anyhow!("Parsing Error!"))?;
+    let (remainder, limit) = parse_limit(remainder).map_err(|_| anyhow!("Parsing Error!"))?;
     let (_, mode) = parse_timeseries(remainder).unwrap();
 
     let mut outputs = HashMap::new();
