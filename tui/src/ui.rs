@@ -24,6 +24,117 @@ pub const PALETTES: [tailwind::Palette; 9] = [
     tailwind::SKY,
 ];
 
+pub fn render_dashboard(app: &mut App, frame: &mut Frame, area: Rect) {
+    let n_graphs = &app.datasets.len();
+    let areas = match *n_graphs {
+        0 => vec![],
+        1 => vec![area],
+        2 => {
+            let layout = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]);
+            let [first, second] = layout.areas(area);
+            vec![first, second]
+        }
+        3 => {
+            let vertical =
+                Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
+            let [top, bottom] = vertical.areas(area);
+            let horizontal =
+                Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]);
+            let [first, second] = horizontal.areas(bottom);
+            vec![top, first, second]
+        }
+        _ => panic!(),
+    };
+
+    (0..areas.len()).for_each(|i| {
+        render_ith_graph(app, frame, areas[i], i);
+    });
+}
+
+pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) {
+    let datasets = app.datasets.iter().nth(i).map(|(_, data)| {
+        data.facets
+            .iter()
+            .map(|(facet, points)| {
+                Dataset::default()
+                    .name(facet.to_owned())
+                    .data(&points[..])
+                    .marker(Marker::Braille)
+                    .graph_type(GraphType::Line)
+                    .style(match facet.as_str() {
+                        ".NET" => Style::default().cyan(),
+                        "Elasticsearch" => Style::default().yellow(),
+                        "Web external" => Style::default().light_red(),
+                        _ => Style::default(),
+                    })
+            })
+            .collect::<Vec<_>>()
+    });
+
+    match datasets {
+        Some(datasets) => {
+            let bounds = app
+                .datasets
+                .iter()
+                .nth(i)
+                .map(|(_, data)| data.bounds)
+                .expect("ERROR: Could not index bounds!");
+            let (min_x, mut min_y) = bounds.mins;
+            let (_, mut max_y) = bounds.maxes;
+            let mut half_y = (max_y - min_y) / 2_f64;
+
+            min_y = f64::round(min_y);
+            max_y = f64::round(max_y);
+            half_y = f64::round(half_y);
+
+            // Create the X axis and define its properties
+            let x_axis = Axis::default()
+                .title("Time".red())
+                .style(Style::default().white())
+                .bounds([min_x, Utc::now().timestamp() as f64])
+                .labels(vec![
+                    DateTime::from_timestamp(min_x as i64, 0)
+                        .unwrap()
+                        .to_string()
+                        .into(),
+                    DateTime::from_timestamp(Utc::now().timestamp() as i64, 0)
+                        .unwrap()
+                        .to_string()
+                        .into(),
+                ]);
+
+            // Create the Y axis and define its properties
+            let y_axis = Axis::default()
+                .title("Transaction Time (ms)".red())
+                .style(Style::default().white())
+                .bounds([min_y, max_y])
+                .labels(vec![
+                    min_y.to_string().into(),
+                    half_y.to_string().into(),
+                    max_y.to_string().into(),
+                ]);
+
+            // Create the chart and link all the parts together
+            let chart = Chart::new(datasets)
+                .block(Block::default().borders(Borders::ALL).title("Chart"))
+                .x_axis(x_axis)
+                .y_axis(y_axis);
+            frame.render_widget(chart, area);
+        }
+        None => {
+            let dummy = BigText::builder()
+                .pixel_size(PixelSize::Full)
+                .style(Style::new().blue())
+                .lines(vec!["XRELIC".light_green().into()])
+                .build()
+                .unwrap();
+
+            let center = centered_rect(30, 30, area);
+            frame.render_widget(dummy, center);
+        }
+    }
+    // frame.render_widget(chart, frame.size());
+}
 pub fn render_rename_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
     let block = Block::default().title("Rename").borders(Borders::ALL);
     let input = Paragraph::new(app.inputs[Focus::Rename as usize].buffer.as_str())

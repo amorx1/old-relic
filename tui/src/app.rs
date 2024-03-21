@@ -1,7 +1,9 @@
 use crate::{
     backend::{Backend as AppBackend, Bounds},
     query::NRQL,
-    ui::{render_graph, render_query_box, render_query_list, render_rename_dialog},
+    ui::{
+        render_dashboard, render_graph, render_query_box, render_query_list, render_rename_dialog,
+    },
 };
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
@@ -20,11 +22,13 @@ use tokio::io;
 const DEFAULT: isize = 0;
 const QUERY: isize = 1;
 const RENAME: isize = 2;
+const DASHBOARD: isize = 4;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Focus {
     QueryInput = QUERY,
     Rename = RENAME,
+    Dashboard = DASHBOARD,
     Default = DEFAULT,
 }
 
@@ -45,7 +49,7 @@ pub struct Dataset {
 }
 
 pub struct App {
-    pub inputs: [Input; 3],
+    pub inputs: [Input; 4],
     pub input_mode: InputMode,
     pub focus: Focus,
     pub backend: AppBackend,
@@ -58,6 +62,10 @@ impl App {
     pub fn new(theme: usize, backend: AppBackend) -> Self {
         Self {
             inputs: [
+                Input {
+                    buffer: "".to_owned(),
+                    cursor_position: 0,
+                },
                 Input {
                     buffer: "".to_owned(),
                     cursor_position: 0,
@@ -101,6 +109,9 @@ impl App {
                                 self.set_focus(Focus::Rename);
                                 self.input_mode = InputMode::Input;
                             }
+                            KeyCode::Char('d') => {
+                                self.set_focus(Focus::Dashboard);
+                            }
                             _ => (),
                         },
                         InputMode::Input if key.kind == KeyEventKind::Press => match key.code {
@@ -126,7 +137,7 @@ impl App {
                                                 );
                                             });
                                     }
-                                    Focus::Default => {}
+                                    _ => {}
                                 };
                                 self.inputs[self.focus as usize].buffer.clear();
                                 self.reset_cursor();
@@ -176,6 +187,10 @@ impl App {
     }
 
     pub fn ui(&mut self, frame: &mut Frame) {
+        if self.focus == Focus::Dashboard {
+            render_dashboard(self, frame, frame.size());
+            return;
+        }
         let area = frame.size();
         // TODO: Possible to pre-compute?
         let horizontal = Layout::horizontal([Constraint::Percentage(15), Constraint::Min(20)]);
@@ -192,6 +207,7 @@ impl App {
             Focus::Rename => {
                 render_rename_dialog(self, frame, graph_area);
             }
+            Focus::Dashboard => render_dashboard(self, frame, frame.size()),
         }
     }
 
