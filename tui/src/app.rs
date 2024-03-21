@@ -91,14 +91,14 @@ impl App {
                         InputMode::Normal if key.kind == KeyEventKind::Press => match key.code {
                             KeyCode::Char('q') => return Ok(()),
                             KeyCode::Char('e') => {
-                                self.focus = Focus::QueryInput;
+                                self.set_focus(Focus::QueryInput);
                                 self.input_mode = InputMode::Input;
                             }
                             KeyCode::Char('j') => self.next(),
                             KeyCode::Char('k') => self.previous(),
                             KeyCode::Char('x') => self.delete(),
                             KeyCode::Char('r') => {
-                                self.focus = Focus::Rename;
+                                self.set_focus(Focus::Rename);
                                 self.input_mode = InputMode::Input;
                             }
                             _ => (),
@@ -130,7 +130,7 @@ impl App {
                                 };
                                 self.inputs[self.focus as usize].buffer.clear();
                                 self.reset_cursor();
-                                self.focus = Focus::Default;
+                                self.set_focus(Focus::Default);
                                 self.input_mode = InputMode::Normal;
                             }
                             KeyCode::Char(to_insert) => {
@@ -203,17 +203,6 @@ impl App {
         self.inputs[self.focus as usize].cursor_position = 0;
     }
 
-    // fn submit(&mut self, buffer: &str) {
-    //     let query = self
-    //         .inputs
-    //         .get(buffer)
-    //         .unwrap()
-    //         .buffer
-    //         .as_str()
-    //         .to_nrql()
-    //         .unwrap();
-    // }
-
     fn move_cursor_left(&mut self) {
         let cursor_moved_left = self.inputs[self.focus as usize]
             .cursor_position
@@ -258,9 +247,9 @@ impl App {
         }
     }
 
-    // pub fn set_focus(&mut self, focus: Focus) {
-    //     self.focus = focus;
-    // }
+    pub fn set_focus(&mut self, focus: Focus) {
+        self.focus = focus
+    }
 
     pub fn delete(&mut self) {
         let i = self.list_state.selected().unwrap();

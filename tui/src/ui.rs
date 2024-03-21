@@ -1,10 +1,8 @@
-use std::sync::Arc;
+use chrono::{DateTime, Utc};
 
-use chrono::{DateTime, Local, NaiveDateTime, Utc};
-use crossterm::terminal::Clear;
 use ratatui::{
     prelude::*,
-    widgets::{Axis, Block, Borders, Chart, Dataset, GraphType, List, Paragraph},
+    widgets::{Axis, Block, Borders, Chart, Clear, Dataset, GraphType, List, Paragraph},
 };
 use style::palette::tailwind;
 use tui_big_text::{BigText, PixelSize};
@@ -35,7 +33,7 @@ pub fn render_rename_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
         })
         .block(block);
     let area = centered_rect(60, 20, area);
-    frame.render_widget(ratatui::widgets::Clear, area);
+    frame.render_widget(Clear, area);
     frame.render_widget(input, area);
 }
 
@@ -104,7 +102,7 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
                 .bounds;
             let (min_x, mut min_y) = bounds.mins;
             let (_, mut max_y) = bounds.maxes;
-            let mut half_y = (max_y - min_y) / 2 as f64;
+            let mut half_y = (max_y - min_y) / 2_f64;
 
             min_y = f64::round(min_y);
             max_y = f64::round(max_y);
