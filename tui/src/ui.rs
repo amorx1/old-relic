@@ -9,7 +9,10 @@ use ratatui::{
 use style::palette::tailwind;
 use tui_big_text::{BigText, PixelSize};
 
-use crate::{app::InputMode, App};
+use crate::{
+    app::{Focus, InputMode},
+    App,
+};
 
 pub const PALETTES: [tailwind::Palette; 9] = [
     tailwind::BLUE,
@@ -25,7 +28,7 @@ pub const PALETTES: [tailwind::Palette; 9] = [
 
 pub fn render_rename_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
     let block = Block::default().title("Rename").borders(Borders::ALL);
-    let input = Paragraph::new(app.inputs.get("rename").unwrap().buffer.as_str())
+    let input = Paragraph::new(app.inputs[Focus::Rename as usize].buffer.as_str())
         .style(match app.input_mode {
             InputMode::Normal => Style::default(),
             InputMode::Input => Style::default().fg(Color::LightGreen),
@@ -59,7 +62,7 @@ pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
-    let input = Paragraph::new(app.inputs.get("query").unwrap().buffer.as_str())
+    let input = Paragraph::new(app.inputs[Focus::QueryInput as usize].buffer.as_str())
         .style(match app.input_mode {
             InputMode::Normal => Style::default(),
             InputMode::Input => Style::default().fg(Color::LightGreen),

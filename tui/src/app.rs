@@ -12,19 +12,20 @@ use ratatui::{
     Frame, Terminal,
 };
 use std::{
-    collections::{
-        btree_map::{self, Entry},
-        BTreeMap, HashMap,
-    },
+    collections::{btree_map::Entry, BTreeMap},
     time::Duration,
 };
 use tokio::io;
 
+const DEFAULT: isize = 0;
+const QUERY: isize = 1;
+const RENAME: isize = 2;
+
 #[derive(Clone, Copy)]
 pub enum Focus {
-    QueryInput,
-    Rename,
-    Default,
+    QueryInput = QUERY,
+    Rename = RENAME,
+    Default = DEFAULT,
 }
 
 pub enum InputMode {
@@ -44,7 +45,7 @@ pub struct Dataset {
 }
 
 pub struct App {
-    pub inputs: BTreeMap<String, Input>,
+    pub inputs: [Input; 3],
     pub input_mode: InputMode,
     pub focus: Focus,
     pub backend: AppBackend,
@@ -56,23 +57,20 @@ pub struct App {
 impl App {
     pub fn new(theme: usize, backend: AppBackend) -> Self {
         Self {
-            // input: String::new(),
-            inputs: BTreeMap::from([
-                (
-                    "query".to_owned(),
-                    Input {
-                        buffer: String::new(),
-                        cursor_position: 0,
-                    },
-                ),
-                (
-                    "rename".to_owned(),
-                    Input {
-                        buffer: String::new(),
-                        cursor_position: 0,
-                    },
-                ),
-            ]),
+            inputs: [
+                Input {
+                    buffer: "".to_owned(),
+                    cursor_position: 0,
+                },
+                Input {
+                    buffer: "".to_owned(),
+                    cursor_position: 0,
+                },
+                Input {
+                    buffer: "".to_owned(),
+                    cursor_position: 0,
+                },
+            ],
             input_mode: InputMode::Normal,
             focus: Focus::Default,
             backend,
@@ -89,11 +87,6 @@ impl App {
             // Manual event handlers.
             if let Ok(true) = event::poll(Duration::from_millis(50)) {
                 if let Event::Key(key) = event::read()? {
-                    let buffer = match self.focus {
-                        Focus::QueryInput => "query",
-                        Focus::Rename => "rename",
-                        _ => "",
-                    };
                     match self.input_mode {
                         InputMode::Normal if key.kind == KeyEventKind::Press => match key.code {
                             KeyCode::Char('q') => return Ok(()),
@@ -111,44 +104,46 @@ impl App {
                             _ => (),
                         },
                         InputMode::Input if key.kind == KeyEventKind::Press => match key.code {
-                            KeyCode::Enter => match buffer {
-                                "query" => {
-                                    if let Ok(query) =
-                                        self.inputs.get(buffer).unwrap().buffer.as_str().to_nrql()
-                                    {
-                                        self.backend.add_query(query);
+                            KeyCode::Enter => {
+                                match self.focus {
+                                    Focus::QueryInput => {
+                                        if let Ok(query) = self.inputs[Focus::QueryInput as usize]
+                                            .buffer
+                                            .as_str()
+                                            .to_nrql()
+                                        {
+                                            self.backend.add_query(query);
+                                        }
                                     }
-                                    self.inputs.get_mut(buffer).unwrap().buffer.clear();
-                                    self.reset_cursor(buffer);
-                                    self.focus = Focus::Default;
-                                    self.input_mode = InputMode::Normal;
-                                }
-                                "rename" => {
-                                    self.datasets
-                                        .entry(self.selected_query.to_owned())
-                                        .and_modify(|v| {
-                                            v.query_alias = Some(
-                                                self.inputs.get(buffer).unwrap().buffer.to_owned(),
-                                            );
-                                        });
-                                    self.inputs.get_mut(buffer).unwrap().buffer.clear();
-                                    self.reset_cursor(buffer);
-                                    self.focus = Focus::Default;
-                                    self.input_mode = InputMode::Normal;
-                                }
-                                _ => {}
-                            },
+                                    Focus::Rename => {
+                                        self.datasets
+                                            .entry(self.selected_query.to_owned())
+                                            .and_modify(|v| {
+                                                v.query_alias = Some(
+                                                    self.inputs[Focus::Rename as usize]
+                                                        .buffer
+                                                        .to_owned(),
+                                                );
+                                            });
+                                    }
+                                    Focus::Default => {}
+                                };
+                                self.inputs[self.focus as usize].buffer.clear();
+                                self.reset_cursor();
+                                self.focus = Focus::Default;
+                                self.input_mode = InputMode::Normal;
+                            }
                             KeyCode::Char(to_insert) => {
-                                self.enter_char(buffer, to_insert);
+                                self.enter_char(to_insert);
                             }
                             KeyCode::Backspace => {
-                                self.delete_char(buffer);
+                                self.delete_char();
                             }
                             KeyCode::Left => {
-                                self.move_cursor_left(buffer);
+                                self.move_cursor_left();
                             }
                             KeyCode::Right => {
-                                self.move_cursor_right(buffer);
+                                self.move_cursor_right();
                             }
                             KeyCode::Esc => {
                                 self.input_mode = InputMode::Normal;
@@ -200,12 +195,12 @@ impl App {
         }
     }
 
-    fn clamp_cursor(&self, buffer: &str, new_cursor_pos: usize) -> usize {
-        new_cursor_pos.clamp(0, self.inputs.get(buffer).unwrap().buffer.len())
+    fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
+        new_cursor_pos.clamp(0, self.inputs[self.focus as usize].buffer.len())
     }
 
-    fn reset_cursor(&mut self, buffer: &str) {
-        self.inputs.get_mut(buffer).unwrap().cursor_position = 0;
+    fn reset_cursor(&mut self) {
+        self.inputs[self.focus as usize].cursor_position = 0;
     }
 
     // fn submit(&mut self, buffer: &str) {
@@ -219,63 +214,47 @@ impl App {
     //         .unwrap();
     // }
 
-    fn move_cursor_left(&mut self, buffer: &str) {
-        let cursor_moved_left = self
-            .inputs
-            .get(buffer)
-            .unwrap()
+    fn move_cursor_left(&mut self) {
+        let cursor_moved_left = self.inputs[self.focus as usize]
             .cursor_position
             .saturating_sub(1);
-        self.inputs.get_mut(buffer).unwrap().cursor_position =
-            self.clamp_cursor(buffer, cursor_moved_left);
+        self.inputs[self.focus as usize].cursor_position = self.clamp_cursor(cursor_moved_left);
     }
 
-    fn move_cursor_right(&mut self, buffer: &str) {
-        let cursor_moved_right = self
-            .inputs
-            .get(buffer)
-            .unwrap()
+    fn move_cursor_right(&mut self) {
+        let cursor_moved_right = self.inputs[self.focus as usize]
             .cursor_position
             .saturating_add(1);
-        self.inputs.get_mut(buffer).unwrap().cursor_position =
-            self.clamp_cursor(buffer, cursor_moved_right);
+        self.inputs[self.focus as usize].cursor_position = self.clamp_cursor(cursor_moved_right);
     }
 
-    fn enter_char(&mut self, buffer: &str, new_char: char) {
-        let cursor_position = self.inputs.get(buffer).unwrap().cursor_position;
-        self.inputs
-            .get_mut(buffer)
-            .unwrap()
+    fn enter_char(&mut self, new_char: char) {
+        let cursor_position = self.inputs[self.focus as usize].cursor_position;
+        self.inputs[self.focus as usize]
             .buffer
             .insert(cursor_position, new_char);
 
-        self.move_cursor_right(buffer);
+        self.move_cursor_right();
     }
 
-    fn delete_char(&mut self, buffer: &str) {
-        let is_not_cursor_leftmost = self.inputs.get(buffer).unwrap().cursor_position != 0;
+    fn delete_char(&mut self) {
+        let is_not_cursor_leftmost = self.inputs[self.focus as usize].cursor_position != 0;
         if is_not_cursor_leftmost {
-            let current_index = self.inputs.get(buffer).unwrap().cursor_position;
+            let current_index = self.inputs[self.focus as usize].cursor_position;
             let from_left_to_current_index = current_index - 1;
 
-            let before_char_to_delete = self
-                .inputs
-                .get(buffer)
-                .unwrap()
+            let before_char_to_delete = self.inputs[self.focus as usize]
                 .buffer
                 .chars()
                 .take(from_left_to_current_index);
-            let after_char_to_delete = self
-                .inputs
-                .get(buffer)
-                .unwrap()
+            let after_char_to_delete = self.inputs[self.focus as usize]
                 .buffer
                 .chars()
                 .skip(current_index);
 
-            self.inputs.get_mut(buffer).unwrap().buffer =
+            self.inputs[self.focus as usize].buffer =
                 before_char_to_delete.chain(after_char_to_delete).collect();
-            self.move_cursor_left(buffer);
+            self.move_cursor_left();
         }
     }
 
