@@ -39,11 +39,12 @@ pub fn render_rename_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
 pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
     let items = app
         .datasets
-        .keys()
-        .cloned()
-        .map(|key| app.query_name_map.get(&key).unwrap().to_owned())
+        .iter()
+        .map(|(query, data)| match &data.query_alias {
+            Some(alias) => alias.to_owned(),
+            None => query.to_owned(),
+        })
         .collect::<Vec<_>>();
-    // let items = app.queries.clone().into_iter().collect::<Vec<_>>();
     let list = List::new(items)
         .block(
             Block::default()
@@ -72,8 +73,9 @@ pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
-    let datasets = app.datasets.get_mut(&app.selected_query).map(|data| {
-        data.iter_mut()
+    let datasets = app.datasets.get(&app.selected_query).map(|data| {
+        data.facets
+            .iter()
             .map(|(facet, points)| {
                 Dataset::default()
                     .name(facet.to_owned())
@@ -91,14 +93,14 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
     });
 
     match datasets {
-        Some(_) => {
-            let now = format!("{}.0", Utc::now().timestamp());
+        Some(datasets) => {
             let bounds = app
-                .bounds
+                .datasets
                 .get(&app.selected_query)
-                .expect("ERROR: No bounds found for selected query");
+                .expect("ERROR: No bounds found for selected query")
+                .bounds;
             let (min_x, mut min_y) = bounds.mins;
-            let (max_x, mut max_y) = bounds.maxes;
+            let (_, mut max_y) = bounds.maxes;
             let mut half_y = (max_y - min_y) / 2 as f64;
 
             min_y = f64::round(min_y);
@@ -133,7 +135,7 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
                 ]);
 
             // Create the chart and link all the parts together
-            let chart = Chart::new(datasets.unwrap())
+            let chart = Chart::new(datasets)
                 .block(Block::default().borders(Borders::ALL).title("Chart"))
                 .x_axis(x_axis)
                 .y_axis(y_axis);

@@ -18,6 +18,7 @@ use server::{
 
 use crate::query::NRQLQuery;
 
+#[derive(Clone, Copy)]
 pub struct Bounds {
     pub mins: (f64, f64),
     pub maxes: (f64, f64),

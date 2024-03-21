@@ -3,8 +3,7 @@ use crate::{
     query::NRQL,
     ui::{render_graph, render_query_box, render_query_list, render_rename_dialog},
 };
-use anyhow::anyhow;
-use chrono::{Timelike, Utc};
+
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     backend::Backend,
@@ -13,7 +12,10 @@ use ratatui::{
     Frame, Terminal,
 };
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{
+        btree_map::{self, Entry},
+        BTreeMap, HashMap,
+    },
     time::Duration,
 };
 use tokio::io;
@@ -35,19 +37,20 @@ pub struct Input {
     pub cursor_position: usize,
 }
 
+pub struct Dataset {
+    pub query_alias: Option<String>,
+    pub facets: BTreeMap<String, Vec<(f64, f64)>>,
+    pub bounds: Bounds,
+}
+
 pub struct App {
-    // pub input: String,
     pub inputs: BTreeMap<String, Input>,
     pub input_mode: InputMode,
-    pub show_rename_dialog: bool,
-    // pub cursor_position: usize,
     pub focus: Focus,
     pub backend: AppBackend,
     pub selected_query: String,
-    pub query_name_map: HashMap<String, String>,
     pub list_state: ListState,
-    pub datasets: BTreeMap<String, BTreeMap<String, Vec<(f64, f64)>>>,
-    pub bounds: BTreeMap<String, Bounds>,
+    pub datasets: BTreeMap<String, Dataset>,
 }
 
 impl App {
@@ -71,15 +74,11 @@ impl App {
                 ),
             ]),
             input_mode: InputMode::Normal,
-            show_rename_dialog: false,
-            // cursor_position: 0,
             focus: Focus::Default,
             backend,
             selected_query: String::new(),
-            query_name_map: HashMap::default(),
             list_state: ListState::default(),
             datasets: BTreeMap::default(),
-            bounds: BTreeMap::default(),
         }
     }
 
@@ -112,9 +111,8 @@ impl App {
                             _ => (),
                         },
                         InputMode::Input if key.kind == KeyEventKind::Press => match key.code {
-                            KeyCode::Enter => {
-                                // self.submit(buffer);
-                                if buffer == "query" {
+                            KeyCode::Enter => match buffer {
+                                "query" => {
                                     if let Ok(query) =
                                         self.inputs.get(buffer).unwrap().buffer.as_str().to_nrql()
                                     {
@@ -124,22 +122,22 @@ impl App {
                                     self.reset_cursor(buffer);
                                     self.focus = Focus::Default;
                                     self.input_mode = InputMode::Normal;
-                                } else if buffer == "rename" {
-                                    self.query_name_map
+                                }
+                                "rename" => {
+                                    self.datasets
                                         .entry(self.selected_query.to_owned())
                                         .and_modify(|v| {
-                                            *v = self.inputs.get(buffer).unwrap().buffer.to_owned();
+                                            v.query_alias = Some(
+                                                self.inputs.get(buffer).unwrap().buffer.to_owned(),
+                                            );
                                         });
-                                    println!(
-                                        "RENAMED TO: {}",
-                                        self.query_name_map.get(&self.selected_query).unwrap()
-                                    );
                                     self.inputs.get_mut(buffer).unwrap().buffer.clear();
                                     self.reset_cursor(buffer);
                                     self.focus = Focus::Default;
                                     self.input_mode = InputMode::Normal;
                                 }
-                            }
+                                _ => {}
+                            },
                             KeyCode::Char(to_insert) => {
                                 self.enter_char(buffer, to_insert);
                             }
@@ -163,12 +161,21 @@ impl App {
             }
 
             while let Some(payload) = self.backend.data_rx.try_iter().next() {
-                // TODO: Fix selection
-                self.bounds.insert(payload.query.to_owned(), payload.bounds);
-                self.query_name_map
-                    .entry(payload.query.to_owned())
-                    .or_insert_with(|| payload.query.to_owned());
-                self.datasets.insert(payload.query, payload.data);
+                if let Entry::Vacant(e) = self.datasets.entry(payload.query.clone()) {
+                    e.insert(Dataset {
+                        query_alias: None,
+                        facets: payload.data,
+                        bounds: payload.bounds,
+                    });
+                } else {
+                    _ = self
+                        .datasets
+                        .entry(payload.query.to_owned())
+                        .and_modify(|data| {
+                            data.facets = payload.data;
+                            data.bounds = payload.bounds;
+                        })
+                }
             }
         }
     }
@@ -281,12 +288,12 @@ impl App {
         let to_delete = self
             .datasets
             .keys()
-            .cloned()
             .nth(i)
+            .cloned()
             .expect("ERROR: Could not index query for deletion!");
 
         let (removed, _) = self.datasets.remove_entry(&to_delete).unwrap();
-        self.backend.ui_tx.send(removed);
+        _ = self.backend.ui_tx.send(removed);
     }
 
     pub fn next(&mut self) {
