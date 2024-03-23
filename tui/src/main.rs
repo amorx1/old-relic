@@ -23,7 +23,7 @@ use std::{
     sync::OnceLock,
 };
 
-static THEME: usize = 8;
+static THEME: usize = 6;
 const ENDPOINT: &str = "https://api.newrelic.com/graphql";
 static ACCOUNT: OnceLock<i64> = OnceLock::new();
 static API_KEY: OnceLock<String> = OnceLock::new();
@@ -66,7 +66,7 @@ fn main() -> io::Result<()> {
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.show_cursor()?;
     let backend = Backend::new(client);
-    let app = App::new(&PALETTES[6], backend, session);
+    let app = App::new(&PALETTES[THEME], backend, session);
 
     app.run(&mut terminal).unwrap();
 
