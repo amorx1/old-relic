@@ -16,15 +16,17 @@ use ratatui::{
 };
 use std::{
     collections::{btree_map::Entry, BTreeMap},
+    fs::File,
+    io::Write,
     time::Duration,
 };
 use tokio::io;
 
-const DEFAULT: isize = 0;
-const QUERY: isize = 1;
-const RENAME: isize = 2;
-const CACHE_LOAD: isize = 3;
-const DASHBOARD: isize = 4;
+pub const QUERY: isize = 0;
+pub const RENAME: isize = 1;
+pub const CACHE_LOAD: isize = 2;
+pub const DEFAULT: isize = 3;
+pub const DASHBOARD: isize = 4;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Focus {
@@ -54,7 +56,7 @@ pub struct Dataset {
 
 pub struct App {
     pub cache: Option<BTreeMap<String, String>>,
-    pub inputs: [Input; 5],
+    pub inputs: [Input; 3],
     pub input_mode: InputMode,
     pub focus: Focus,
     pub backend: AppBackend,
@@ -79,14 +81,6 @@ impl App {
                     buffer: "".to_owned(),
                     cursor_position: 0,
                 },
-                Input {
-                    buffer: "".to_owned(),
-                    cursor_position: 0,
-                },
-                Input {
-                    buffer: "".to_owned(),
-                    cursor_position: 0,
-                },
             ],
             cache,
             input_mode: InputMode::Normal,
@@ -99,17 +93,10 @@ impl App {
     }
 
     pub fn run<B: Backend>(mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
-        // if let Some(cached_queries) = self.cache {
-        //     cached_queries
-        //         .values()
-        //         .for_each(|q| self.backend.add_query(q.trim().to_nrql().unwrap()));
-        //     self.cache = None;
-        // };
-
         loop {
             terminal.draw(|f| self.ui(f))?;
 
-            if let Some(cached_queries) = &self.cache {
+            if self.cache.is_some() {
                 self.focus = Focus::CacheLoad;
                 self.input_mode = InputMode::Input;
             }
@@ -140,10 +127,8 @@ impl App {
                             KeyCode::Enter => {
                                 match self.focus {
                                     Focus::QueryInput => {
-                                        if let Ok(query) = self.inputs[Focus::QueryInput as usize]
-                                            .buffer
-                                            .as_str()
-                                            .to_nrql()
+                                        if let Ok(query) =
+                                            self.inputs[QUERY as usize].buffer.as_str().to_nrql()
                                         {
                                             self.backend.add_query(query);
                                         }
@@ -153,15 +138,12 @@ impl App {
                                             .entry(self.selected_query.to_owned())
                                             .and_modify(|v| {
                                                 v.query_alias = Some(
-                                                    self.inputs[Focus::Rename as usize]
-                                                        .buffer
-                                                        .to_owned(),
+                                                    self.inputs[RENAME as usize].buffer.to_owned(),
                                                 );
                                             });
                                     }
                                     Focus::CacheLoad => {
-                                        match self.inputs[Focus::CacheLoad as usize].buffer.as_str()
-                                        {
+                                        match self.inputs[CACHE_LOAD as usize].buffer.as_str() {
                                             // Load cache
                                             "y" | "Y" => {
                                                 if let Some(cached_queries) = self.cache {
@@ -252,7 +234,7 @@ impl App {
             Focus::Rename => {
                 render_rename_dialog(self, frame, graph_area);
             }
-            Focus::Dashboard => render_dashboard(self, frame, frame.size()),
+            // Should never be reached
             _ => panic!(),
         }
     }
@@ -365,4 +347,23 @@ impl App {
             .expect("ERROR: Could not select query!")
             .to_owned();
     }
+
+    // pub fn save_session(&self) {
+    //     let output = self
+    //         .datasets
+    //         .iter()
+    //         .map(|(q, data)| {
+    //             (
+    //                 data.query_alias.clone().unwrap_or(q.to_owned()),
+    //                 q.to_owned(),
+    //             )
+    //         })
+    //         .collect::<BTreeMap<String, String>>();
+
+    //     let yaml: String =
+    //         serde_yaml::to_string(&output).expect("ERROR: Could not serialize queries!");
+    //     let mut file = File::open("").expect("ERROR: Could not open file!");
+    //     file.write_all(yaml.as_bytes())
+    //         .expect("ERROR: Could not write to file!");
+    // }
 }

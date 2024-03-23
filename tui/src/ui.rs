@@ -1,4 +1,4 @@
-use chrono::{DateTime, Timelike, Utc};
+use chrono::{DateTime, Utc};
 
 use ratatui::{
     prelude::*,
@@ -6,30 +6,30 @@ use ratatui::{
         Axis, Block, Borders, Chart, Clear, Dataset, GraphType, LegendPosition, List, Paragraph,
     },
 };
-use style::palette::tailwind;
+// use style::palette::tailwind;
 use tui_big_text::{BigText, PixelSize};
 
 use crate::{
-    app::{Focus, InputMode},
+    app::{InputMode, CACHE_LOAD, QUERY, RENAME},
     App,
 };
 
-pub const PALETTES: [tailwind::Palette; 9] = [
-    tailwind::BLUE,
-    tailwind::EMERALD,
-    tailwind::INDIGO,
-    tailwind::RED,
-    tailwind::AMBER,
-    tailwind::ROSE,
-    tailwind::LIME,
-    tailwind::FUCHSIA,
-    tailwind::SKY,
-];
+// pub const PALETTES: [tailwind::Palette; 9] = [
+//     tailwind::BLUE,
+//     tailwind::EMERALD,
+//     tailwind::INDIGO,
+//     tailwind::RED,
+//     tailwind::AMBER,
+//     tailwind::ROSE,
+//     tailwind::LIME,
+//     tailwind::FUCHSIA,
+//     tailwind::SKY,
+// ];
 
 pub fn render_load_cache(app: &mut App, frame: &mut Frame, area: Rect) {
     let block = Block::default().title("Load cache?").borders(Borders::ALL);
     let prompt = Text::from("A cache was located. Would you like to reload the queries? y/n");
-    let input = Paragraph::new(app.inputs[Focus::CacheLoad as usize].buffer.as_str())
+    let input = Paragraph::new(app.inputs[CACHE_LOAD as usize].buffer.as_str())
         .style(match app.input_mode {
             InputMode::Normal => Style::default(),
             InputMode::Input => Style::default().fg(Color::LightGreen),
@@ -169,7 +169,7 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
 
 pub fn render_rename_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
     let block = Block::default().title("Rename").borders(Borders::ALL);
-    let input = Paragraph::new(app.inputs[Focus::Rename as usize].buffer.as_str())
+    let input = Paragraph::new(app.inputs[RENAME as usize].buffer.as_str())
         .style(match app.input_mode {
             InputMode::Normal => Style::default(),
             InputMode::Input => Style::default().fg(Color::LightGreen),
@@ -203,7 +203,7 @@ pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
-    let input = Paragraph::new(app.inputs[Focus::QueryInput as usize].buffer.as_str())
+    let input = Paragraph::new(app.inputs[QUERY as usize].buffer.as_str())
         .style(match app.input_mode {
             InputMode::Normal => Style::default(),
             InputMode::Input => Style::default().fg(Color::LightGreen),
