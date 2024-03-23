@@ -47,14 +47,19 @@ fn parse_from(input: &str) -> IResult<&str, &str> {
 }
 
 pub fn parse_nrql(input: &str) -> Result<HashMap<String, String>> {
-    let (remainder, from) = parse_from(input).map_err(|_| anyhow!("Parsing Error!"))?;
-    let (remainder, select) = parse_select(remainder).map_err(|_| anyhow!("Parsing Error!"))?;
-    let (remainder, r#where) = parse_where(remainder).map_err(|_| anyhow!("Parsing Error!"))?;
+    let (remainder, from) = parse_from(input).map_err(|_| anyhow!("Parsing Error! : FROM"))?;
+    let (remainder, select) =
+        parse_select(remainder).map_err(|_| anyhow!("Parsing Error!: SELECT"))?;
+    let (remainder, r#where) =
+        parse_where(remainder).map_err(|_| anyhow!("Parsing Error! : WHERE"))?;
     let (remainder, facet) = parse_facet(remainder).unwrap_or((remainder, ""));
-    let (remainder, since) = parse_since(remainder).map_err(|_| anyhow!("Parsing Error!"))?;
-    let (remainder, until) = parse_until(remainder).map_err(|_| anyhow!("Parsing Error!"))?;
-    let (remainder, limit) = parse_limit(remainder).map_err(|_| anyhow!("Parsing Error!"))?;
-    let (_, mode) = parse_timeseries(remainder).map_err(|_| anyhow!("Parsing error!"))?;
+    let (remainder, since) =
+        parse_since(remainder).map_err(|_| anyhow!("Parsing Error! : SINCE"))?;
+    let (remainder, until) =
+        parse_until(remainder).map_err(|_| anyhow!("Parsing Error! : UNTIL"))?;
+    let (remainder, limit) =
+        parse_limit(remainder).map_err(|_| anyhow!("Parsing Error! : LIMIT"))?;
+    let (_, mode) = parse_timeseries(remainder).map_err(|_| anyhow!("Parsing error! : MODE"))?;
 
     let mut outputs = HashMap::new();
 

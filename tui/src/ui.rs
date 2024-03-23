@@ -26,6 +26,21 @@ pub const PALETTES: [tailwind::Palette; 9] = [
     tailwind::SKY,
 ];
 
+pub fn render_load_cache(app: &mut App, frame: &mut Frame, area: Rect) {
+    let block = Block::default().title("Load cache?").borders(Borders::ALL);
+    let prompt = Text::from("A cache was located. Would you like to reload the queries? y/n");
+    let input = Paragraph::new(app.inputs[Focus::CacheLoad as usize].buffer.as_str())
+        .style(match app.input_mode {
+            InputMode::Normal => Style::default(),
+            InputMode::Input => Style::default().fg(Color::LightGreen),
+        })
+        .block(block);
+    let area = centered_rect(60, 20, area);
+    frame.render_widget(prompt, area);
+    frame.render_widget(Clear, area);
+    frame.render_widget(input, area);
+}
+
 pub fn render_dashboard(app: &mut App, frame: &mut Frame, area: Rect) {
     let n_graphs = &app.datasets.len();
     let areas = match *n_graphs {

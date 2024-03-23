@@ -2,7 +2,8 @@ use crate::{
     backend::{Backend as AppBackend, Bounds},
     query::NRQL,
     ui::{
-        render_dashboard, render_graph, render_query_box, render_query_list, render_rename_dialog,
+        render_dashboard, render_graph, render_load_cache, render_query_box, render_query_list,
+        render_rename_dialog,
     },
 };
 
@@ -22,6 +23,7 @@ use tokio::io;
 const DEFAULT: isize = 0;
 const QUERY: isize = 1;
 const RENAME: isize = 2;
+const CACHE_LOAD: isize = 3;
 const DASHBOARD: isize = 4;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -29,6 +31,7 @@ pub enum Focus {
     QueryInput = QUERY,
     Rename = RENAME,
     Dashboard = DASHBOARD,
+    CacheLoad = CACHE_LOAD,
     Default = DEFAULT,
 }
 
@@ -50,7 +53,8 @@ pub struct Dataset {
 }
 
 pub struct App {
-    pub inputs: [Input; 4],
+    pub cache: Option<BTreeMap<String, String>>,
+    pub inputs: [Input; 5],
     pub input_mode: InputMode,
     pub focus: Focus,
     pub backend: AppBackend,
@@ -60,7 +64,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(theme: usize, backend: AppBackend) -> Self {
+    pub fn new(theme: usize, backend: AppBackend, cache: Option<BTreeMap<String, String>>) -> Self {
         Self {
             inputs: [
                 Input {
@@ -79,7 +83,12 @@ impl App {
                     buffer: "".to_owned(),
                     cursor_position: 0,
                 },
+                Input {
+                    buffer: "".to_owned(),
+                    cursor_position: 0,
+                },
             ],
+            cache,
             input_mode: InputMode::Normal,
             focus: Focus::Default,
             backend,
@@ -90,8 +99,20 @@ impl App {
     }
 
     pub fn run<B: Backend>(mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
+        // if let Some(cached_queries) = self.cache {
+        //     cached_queries
+        //         .values()
+        //         .for_each(|q| self.backend.add_query(q.trim().to_nrql().unwrap()));
+        //     self.cache = None;
+        // };
+
         loop {
             terminal.draw(|f| self.ui(f))?;
+
+            if let Some(cached_queries) = &self.cache {
+                self.focus = Focus::CacheLoad;
+                self.input_mode = InputMode::Input;
+            }
 
             // Manual event handlers.
             if let Ok(true) = event::poll(Duration::from_millis(50)) {
@@ -137,6 +158,24 @@ impl App {
                                                         .to_owned(),
                                                 );
                                             });
+                                    }
+                                    Focus::CacheLoad => {
+                                        match self.inputs[Focus::CacheLoad as usize].buffer.as_str()
+                                        {
+                                            // Load cache
+                                            "y" | "Y" => {
+                                                if let Some(cached_queries) = self.cache {
+                                                    cached_queries.values().for_each(|q| {
+                                                        self.backend
+                                                            .add_query(q.trim().to_nrql().unwrap())
+                                                    });
+                                                };
+                                            }
+                                            // Don't load cache
+                                            _ => {}
+                                        }
+                                        self.cache = None;
+                                        self.focus = Focus::Default;
                                     }
                                     _ => {}
                                 };
@@ -189,6 +228,10 @@ impl App {
     }
 
     pub fn ui(&mut self, frame: &mut Frame) {
+        if self.focus == Focus::CacheLoad {
+            render_load_cache(self, frame, frame.size());
+            return;
+        }
         if self.focus == Focus::Dashboard {
             render_dashboard(self, frame, frame.size());
             return;
@@ -210,6 +253,7 @@ impl App {
                 render_rename_dialog(self, frame, graph_area);
             }
             Focus::Dashboard => render_dashboard(self, frame, frame.size()),
+            _ => panic!(),
         }
     }
 

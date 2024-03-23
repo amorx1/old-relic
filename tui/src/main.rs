@@ -15,7 +15,10 @@ use reqwest::Client;
 use server::NewRelicClient;
 
 use std::{
+    collections::BTreeMap,
+    env, fs,
     io::{self, stdout},
+    path::{Path, PathBuf},
     sync::OnceLock,
 };
 
@@ -37,6 +40,21 @@ fn main() -> io::Result<()> {
     let api_key = API_KEY
         .get_or_init(|| std::env::var("NR_API_KEY").expect("ERROR: No NR_API_KEY provided!"));
 
+    let home_dir = match env::var("HOME") {
+        Ok(val) => val,
+        Err(_) => {
+            eprintln!("Unable to determine home directory.");
+            panic!()
+        }
+    };
+
+    // Construct the path to Application Support directory
+    let mut cache_path = PathBuf::from(home_dir);
+    cache_path.push("Library/Application Support/xrelic/cache.yaml");
+    let cache_str = fs::read_to_string(cache_path).expect("ERROR: Could not read cache file!");
+    let cache: Option<BTreeMap<String, String>> =
+        serde_yaml::from_str(&cache_str).expect("ERROR: Could not deserialize cache file!");
+
     let mut client = NewRelicClient::builder();
     client
         .url(ENDPOINT)
@@ -47,7 +65,7 @@ fn main() -> io::Result<()> {
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.show_cursor()?;
     let backend = Backend::new(client);
-    let app = App::new(THEME, backend);
+    let app = App::new(THEME, backend, cache);
 
     app.run(&mut terminal).unwrap();
 
