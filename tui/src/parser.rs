@@ -54,7 +54,7 @@ pub fn parse_nrql(input: &str) -> Result<HashMap<String, String>> {
     let (remainder, since) = parse_since(remainder).map_err(|_| anyhow!("Parsing Error!"))?;
     let (remainder, until) = parse_until(remainder).map_err(|_| anyhow!("Parsing Error!"))?;
     let (remainder, limit) = parse_limit(remainder).map_err(|_| anyhow!("Parsing Error!"))?;
-    let (_, mode) = parse_timeseries(remainder).unwrap();
+    let (_, mode) = parse_timeseries(remainder).map_err(|_| anyhow!("Parsing error!"))?;
 
     let mut outputs = HashMap::new();
 

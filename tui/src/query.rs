@@ -65,7 +65,3 @@ impl NRQL for &str {
 pub trait NRQL {
     fn to_nrql(self) -> Result<NRQLQuery>;
 }
-
-// pub trait Timeseries: Send + Sync {
-//     fn timeseries(&self) -> Result<String>;
-// }

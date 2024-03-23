@@ -46,6 +46,7 @@ pub struct Dataset {
     pub query_alias: Option<String>,
     pub facets: BTreeMap<String, Vec<(f64, f64)>>,
     pub bounds: Bounds,
+    pub selection: String,
 }
 
 pub struct App {
@@ -172,6 +173,7 @@ impl App {
                         query_alias: None,
                         facets: payload.data,
                         bounds: payload.bounds,
+                        selection: payload.selection,
                     });
                 } else {
                     _ = self

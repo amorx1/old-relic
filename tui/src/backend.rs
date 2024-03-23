@@ -28,6 +28,7 @@ pub struct Payload {
     pub query: String,
     pub data: BTreeMap<String, Vec<(f64, f64)>>,
     pub bounds: Bounds,
+    pub selection: String,
 }
 
 pub struct Backend {
@@ -123,6 +124,7 @@ pub async fn refresh_timeseries(
                     mins: min_bounds,
                     maxes: max_bounds,
                 },
+                selection: query.select.to_owned(),
             })?
         }
         sleep(Duration::from_millis(16)).await;

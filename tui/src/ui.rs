@@ -1,8 +1,10 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Timelike, Utc};
 
 use ratatui::{
     prelude::*,
-    widgets::{Axis, Block, Borders, Chart, Clear, Dataset, GraphType, List, Paragraph},
+    widgets::{
+        Axis, Block, Borders, Chart, Clear, Dataset, GraphType, LegendPosition, List, Paragraph,
+    },
 };
 use style::palette::tailwind;
 use tui_big_text::{BigText, PixelSize};
@@ -65,6 +67,7 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
                         ".NET" => Style::default().cyan(),
                         "Elasticsearch" => Style::default().yellow(),
                         "Web external" => Style::default().light_red(),
+                        "value" => Style::default().light_magenta(),
                         _ => Style::default(),
                     })
             })
@@ -73,12 +76,15 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
 
     match datasets {
         Some(datasets) => {
-            let bounds = app
+            let (_, dataset) = app
                 .datasets
                 .iter()
                 .nth(i)
-                .map(|(_, data)| data.bounds)
                 .expect("ERROR: Could not index bounds!");
+
+            let bounds = dataset.bounds;
+            let selection = &dataset.selection;
+
             let (min_x, mut min_y) = bounds.mins;
             let (_, mut max_y) = bounds.maxes;
             let mut half_y = (max_y - min_y) / 2_f64;
@@ -90,33 +96,44 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
             // Create the X axis and define its properties
             let x_axis = Axis::default()
                 .title("Time".red())
-                .style(Style::default().white())
+                .style(Style::default().red())
                 .bounds([min_x, Utc::now().timestamp() as f64])
                 .labels(vec![
                     DateTime::from_timestamp(min_x as i64, 0)
                         .unwrap()
+                        .time()
                         .to_string()
-                        .into(),
-                    DateTime::from_timestamp(Utc::now().timestamp() as i64, 0)
+                        .red()
+                        .bold(),
+                    DateTime::from_timestamp(Utc::now().timestamp(), 0)
                         .unwrap()
                         .to_string()
-                        .into(),
+                        .red()
+                        .bold(),
                 ]);
 
             // Create the Y axis and define its properties
             let y_axis = Axis::default()
-                .title("Transaction Time (ms)".red())
+                .title(selection.clone().red())
                 .style(Style::default().white())
                 .bounds([min_y, max_y])
                 .labels(vec![
-                    min_y.to_string().into(),
-                    half_y.to_string().into(),
-                    max_y.to_string().into(),
+                    min_y.to_string().red().bold(),
+                    half_y.to_string().red().bold(),
+                    max_y.to_string().red().bold(),
                 ]);
+
+            let legend_position = match &datasets.len() {
+                1 => None,
+                _ => Some(LegendPosition::TopRight),
+            };
 
             // Create the chart and link all the parts together
             let chart = Chart::new(datasets)
-                .block(Block::default().borders(Borders::ALL).title("Chart"))
+                .block(
+                    Block::default(), /*.borders(Borders::ALL).title("Chart")*/
+                )
+                .legend_position(legend_position)
                 .x_axis(x_axis)
                 .y_axis(y_axis);
             frame.render_widget(chart, area);
@@ -133,8 +150,8 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
             frame.render_widget(dummy, center);
         }
     }
-    // frame.render_widget(chart, frame.size());
 }
+
 pub fn render_rename_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
     let block = Block::default().title("Rename").borders(Borders::ALL);
     let input = Paragraph::new(app.inputs[Focus::Rename as usize].buffer.as_str())
@@ -163,7 +180,7 @@ pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
                 .borders(Borders::ALL)
                 .title("Active Queries"),
         )
-        .highlight_style(Style::new().add_modifier(Modifier::REVERSED))
+        .highlight_style(Style::new().add_modifier(Modifier::REVERSED).light_green())
         .highlight_symbol(">>")
         .repeat_highlight_symbol(true);
 
@@ -198,6 +215,7 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
                         ".NET" => Style::default().cyan(),
                         "Elasticsearch" => Style::default().yellow(),
                         "Web external" => Style::default().light_red(),
+                        "value" => Style::default().light_magenta(),
                         _ => Style::default(),
                     })
             })
@@ -206,11 +224,13 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
 
     match datasets {
         Some(datasets) => {
-            let bounds = app
+            let dataset = app
                 .datasets
                 .get(&app.selected_query)
-                .expect("ERROR: No bounds found for selected query")
-                .bounds;
+                .expect("ERROR: No bounds found for selected query");
+            let bounds = dataset.bounds;
+            let selection = &dataset.selection;
+
             let (min_x, mut min_y) = bounds.mins;
             let (_, mut max_y) = bounds.maxes;
             let mut half_y = (max_y - min_y) / 2_f64;
@@ -222,33 +242,42 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
             // Create the X axis and define its properties
             let x_axis = Axis::default()
                 .title("Time".red())
-                .style(Style::default().white())
+                .style(Style::default().red())
                 .bounds([min_x, Utc::now().timestamp() as f64])
                 .labels(vec![
                     DateTime::from_timestamp(min_x as i64, 0)
                         .unwrap()
+                        .time()
                         .to_string()
-                        .into(),
-                    DateTime::from_timestamp(Utc::now().timestamp() as i64, 0)
+                        .red()
+                        .bold(),
+                    DateTime::from_timestamp(Utc::now().timestamp(), 0)
                         .unwrap()
                         .to_string()
-                        .into(),
+                        .red()
+                        .bold(),
                 ]);
 
             // Create the Y axis and define its properties
             let y_axis = Axis::default()
-                .title("Transaction Time (ms)".red())
-                .style(Style::default().white())
+                .title(selection.clone().red())
+                .style(Style::default().red())
                 .bounds([min_y, max_y])
                 .labels(vec![
-                    min_y.to_string().into(),
-                    half_y.to_string().into(),
-                    max_y.to_string().into(),
+                    min_y.to_string().red().bold(),
+                    half_y.to_string().red().bold(),
+                    max_y.to_string().red().bold(),
                 ]);
+
+            let legend_position = match &datasets.len() {
+                1 => None,
+                _ => Some(LegendPosition::TopRight),
+            };
 
             // Create the chart and link all the parts together
             let chart = Chart::new(datasets)
                 .block(Block::default().borders(Borders::ALL).title("Chart"))
+                .legend_position(legend_position)
                 .x_axis(x_axis)
                 .y_axis(y_axis);
             frame.render_widget(chart, area);
