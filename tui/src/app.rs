@@ -1,8 +1,8 @@
 use crate::{
-    backend::{Backend as AppBackend, Bounds},
-    query::NRQL,
+    backend::{Backend as AppBackend, Bounds, Payload},
+    query::{NRQLQuery, NRQL},
     ui::{
-        render_dashboard, render_graph, render_load_cache, render_query_box, render_query_list,
+        render_dashboard, render_graph, render_load_session, render_query_box, render_query_list,
         render_rename_dialog,
     },
 };
@@ -11,6 +11,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     backend::Backend,
     layout::{Constraint, Layout},
+    style::{palette::tailwind::Palette, Color},
     widgets::ListState,
     Frame, Terminal,
 };
@@ -24,7 +25,7 @@ use tokio::io;
 
 pub const QUERY: isize = 0;
 pub const RENAME: isize = 1;
-pub const CACHE_LOAD: isize = 2;
+pub const SESSION_LOAD: isize = 2;
 pub const DEFAULT: isize = 3;
 pub const DASHBOARD: isize = 4;
 
@@ -33,7 +34,7 @@ pub enum Focus {
     QueryInput = QUERY,
     Rename = RENAME,
     Dashboard = DASHBOARD,
-    CacheLoad = CACHE_LOAD,
+    SessionLoad = SESSION_LOAD,
     Default = DEFAULT,
 }
 
@@ -54,9 +55,19 @@ pub struct Dataset {
     pub selection: String,
 }
 
+pub struct Theme {
+    pub focus_fg: Color,
+    pub chart_fg: Color,
+    pub elastic_fg: Color,
+    pub net_fg: Color,
+    pub webex_fg: Color,
+    pub value_fg: Color,
+}
+
 pub struct App {
-    pub cache: Option<BTreeMap<String, String>>,
-    pub inputs: [Input; 3],
+    pub session: Option<BTreeMap<String, String>>,
+    pub theme: Theme,
+    pub inputs: [Input; 4],
     pub input_mode: InputMode,
     pub focus: Focus,
     pub backend: AppBackend,
@@ -66,7 +77,11 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(theme: usize, backend: AppBackend, cache: Option<BTreeMap<String, String>>) -> Self {
+    pub fn new(
+        palette: &Palette,
+        backend: AppBackend,
+        session: Option<BTreeMap<String, String>>,
+    ) -> Self {
         Self {
             inputs: [
                 Input {
@@ -81,8 +96,20 @@ impl App {
                     buffer: "".to_owned(),
                     cursor_position: 0,
                 },
+                Input {
+                    buffer: "".to_owned(),
+                    cursor_position: 0,
+                },
             ],
-            cache,
+            session,
+            theme: Theme {
+                focus_fg: palette.c500,
+                chart_fg: palette.c900,
+                elastic_fg: palette.c400,
+                net_fg: palette.c400,
+                webex_fg: palette.c400,
+                value_fg: palette.c400,
+            },
             input_mode: InputMode::Normal,
             focus: Focus::Default,
             backend,
@@ -96,8 +123,8 @@ impl App {
         loop {
             terminal.draw(|f| self.ui(f))?;
 
-            if self.cache.is_some() {
-                self.focus = Focus::CacheLoad;
+            if self.session.is_some() {
+                self.focus = Focus::SessionLoad;
                 self.input_mode = InputMode::Input;
             }
 
@@ -119,7 +146,10 @@ impl App {
                                 self.input_mode = InputMode::Input;
                             }
                             KeyCode::Char('d') => {
-                                self.set_focus(Focus::Dashboard);
+                                self.set_focus(match self.focus {
+                                    Focus::Dashboard => Focus::Default,
+                                    _ => Focus::Dashboard,
+                                });
                             }
                             _ => (),
                         },
@@ -127,37 +157,31 @@ impl App {
                             KeyCode::Enter => {
                                 match self.focus {
                                     Focus::QueryInput => {
-                                        if let Ok(query) =
-                                            self.inputs[QUERY as usize].buffer.as_str().to_nrql()
-                                        {
-                                            self.backend.add_query(query);
+                                        if let Ok(query) = self.input_buffer(QUERY).to_nrql() {
+                                            self.add_query(query);
                                         }
                                     }
                                     Focus::Rename => {
-                                        self.datasets
-                                            .entry(self.selected_query.to_owned())
-                                            .and_modify(|v| {
-                                                v.query_alias = Some(
-                                                    self.inputs[RENAME as usize].buffer.to_owned(),
-                                                );
-                                            });
+                                        self.rename_current_query();
                                     }
-                                    Focus::CacheLoad => {
-                                        match self.inputs[CACHE_LOAD as usize].buffer.as_str() {
-                                            // Load cache
+                                    Focus::SessionLoad => {
+                                        match self.input_buffer(SESSION_LOAD) {
+                                            // Load session
                                             "y" | "Y" => {
-                                                if let Some(cached_queries) = self.cache {
-                                                    cached_queries.values().for_each(|q| {
-                                                        self.backend
-                                                            .add_query(q.trim().to_nrql().unwrap())
+                                                if let Some(session_queries) = &self.session {
+                                                    session_queries.values().for_each(|q| {
+                                                        if let Ok(query) = q.trim().to_nrql() {
+                                                            self.add_query(query)
+                                                        }
                                                     });
                                                 };
                                             }
-                                            // Don't load cache
+                                            // Don't load session
                                             _ => {}
                                         }
-                                        self.cache = None;
-                                        self.focus = Focus::Default;
+                                        self.session.unwrap().clear();
+                                        self.session = None;
+                                        self.set_focus(Focus::Default);
                                     }
                                     _ => {}
                                 };
@@ -210,8 +234,8 @@ impl App {
     }
 
     pub fn ui(&mut self, frame: &mut Frame) {
-        if self.focus == Focus::CacheLoad {
-            render_load_cache(self, frame, frame.size());
+        if self.focus == Focus::SessionLoad {
+            render_load_session(self, frame, frame.size());
             return;
         }
         if self.focus == Focus::Dashboard {
@@ -237,6 +261,20 @@ impl App {
             // Should never be reached
             _ => panic!(),
         }
+    }
+
+    fn rename_current_query(&mut self) {
+        self.datasets
+            .entry(self.selected_query.to_owned())
+            .and_modify(|v| v.query_alias = Some(self.inputs[RENAME as usize].buffer.to_owned()));
+    }
+
+    pub fn input_buffer(&self, focus: isize) -> &str {
+        self.inputs[focus as usize].buffer.as_str()
+    }
+
+    fn add_query(&self, query: NRQLQuery) {
+        self.backend.add_query(query);
     }
 
     fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
@@ -348,22 +386,22 @@ impl App {
             .to_owned();
     }
 
-    // pub fn save_session(&self) {
-    //     let output = self
-    //         .datasets
-    //         .iter()
-    //         .map(|(q, data)| {
-    //             (
-    //                 data.query_alias.clone().unwrap_or(q.to_owned()),
-    //                 q.to_owned(),
-    //             )
-    //         })
-    //         .collect::<BTreeMap<String, String>>();
+    pub fn save_session(&self) {
+        let output = self
+            .datasets
+            .iter()
+            .map(|(q, data)| {
+                (
+                    data.query_alias.clone().unwrap_or(q.to_owned()),
+                    q.to_owned(),
+                )
+            })
+            .collect::<BTreeMap<String, String>>();
 
-    //     let yaml: String =
-    //         serde_yaml::to_string(&output).expect("ERROR: Could not serialize queries!");
-    //     let mut file = File::open("").expect("ERROR: Could not open file!");
-    //     file.write_all(yaml.as_bytes())
-    //         .expect("ERROR: Could not write to file!");
-    // }
+        let yaml: String =
+            serde_yaml::to_string(&output).expect("ERROR: Could not serialize queries!");
+        let mut file = File::open("").expect("ERROR: Could not open file!");
+        file.write_all(yaml.as_bytes())
+            .expect("ERROR: Could not write to file!");
+    }
 }

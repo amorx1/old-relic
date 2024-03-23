@@ -3,36 +3,40 @@ use chrono::{DateTime, Utc};
 use ratatui::{
     prelude::*,
     widgets::{
-        Axis, Block, Borders, Chart, Clear, Dataset, GraphType, LegendPosition, List, Paragraph,
+        Axis, Block, BorderType, Borders, Chart, Clear, Dataset, GraphType, LegendPosition, List,
+        Paragraph,
     },
 };
-// use style::palette::tailwind;
+use style::palette::tailwind;
 use tui_big_text::{BigText, PixelSize};
 
 use crate::{
-    app::{InputMode, CACHE_LOAD, QUERY, RENAME},
+    app::{InputMode, QUERY, RENAME, SESSION_LOAD},
     App,
 };
 
-// pub const PALETTES: [tailwind::Palette; 9] = [
-//     tailwind::BLUE,
-//     tailwind::EMERALD,
-//     tailwind::INDIGO,
-//     tailwind::RED,
-//     tailwind::AMBER,
-//     tailwind::ROSE,
-//     tailwind::LIME,
-//     tailwind::FUCHSIA,
-//     tailwind::SKY,
-// ];
+pub const PALETTES: [tailwind::Palette; 9] = [
+    tailwind::BLUE,
+    tailwind::EMERALD,
+    tailwind::INDIGO,
+    tailwind::RED,
+    tailwind::AMBER,
+    tailwind::ROSE,
+    tailwind::LIME,
+    tailwind::FUCHSIA,
+    tailwind::SKY,
+];
 
-pub fn render_load_cache(app: &mut App, frame: &mut Frame, area: Rect) {
-    let block = Block::default().title("Load cache?").borders(Borders::ALL);
-    let prompt = Text::from("A cache was located. Would you like to reload the queries? y/n");
-    let input = Paragraph::new(app.inputs[CACHE_LOAD as usize].buffer.as_str())
+pub fn render_load_session(app: &mut App, frame: &mut Frame, area: Rect) {
+    let block = Block::default()
+        .title("Load session?")
+        .borders(Borders::ALL);
+    let prompt =
+        Text::from("A previous session was found. Would you like to reload its queries? y/n");
+    let input = Paragraph::new(app.input_buffer(SESSION_LOAD))
         .style(match app.input_mode {
             InputMode::Normal => Style::default(),
-            InputMode::Input => Style::default().fg(Color::LightGreen),
+            InputMode::Input => Style::default().fg(app.theme.focus_fg),
         })
         .block(block);
     let area = centered_rect(60, 20, area);
@@ -79,10 +83,10 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
                     .marker(Marker::Braille)
                     .graph_type(GraphType::Line)
                     .style(match facet.as_str() {
-                        ".NET" => Style::default().cyan(),
-                        "Elasticsearch" => Style::default().yellow(),
-                        "Web external" => Style::default().light_red(),
-                        "value" => Style::default().light_magenta(),
+                        ".NET" => Style::default().fg(app.theme.net_fg),
+                        "Elasticsearch" => Style::default().fg(app.theme.elastic_fg),
+                        "Web external" => Style::default().fg(app.theme.webex_fg),
+                        "value" => Style::default().fg(app.theme.value_fg),
                         _ => Style::default(),
                     })
             })
@@ -111,31 +115,31 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
             // Create the X axis and define its properties
             let x_axis = Axis::default()
                 .title("Time".red())
-                .style(Style::default().red())
+                .style(Style::default().fg(app.theme.chart_fg))
                 .bounds([min_x, Utc::now().timestamp() as f64])
                 .labels(vec![
                     DateTime::from_timestamp(min_x as i64, 0)
                         .unwrap()
                         .time()
                         .to_string()
-                        .red()
+                        .fg(app.theme.chart_fg)
                         .bold(),
                     DateTime::from_timestamp(Utc::now().timestamp(), 0)
                         .unwrap()
                         .to_string()
-                        .red()
+                        .fg(app.theme.chart_fg)
                         .bold(),
                 ]);
 
             // Create the Y axis and define its properties
             let y_axis = Axis::default()
-                .title(selection.clone().red())
-                .style(Style::default().white())
+                .title(selection.clone().fg(app.theme.chart_fg))
+                .style(Style::default().fg(app.theme.chart_fg))
                 .bounds([min_y, max_y])
                 .labels(vec![
-                    min_y.to_string().red().bold(),
-                    half_y.to_string().red().bold(),
-                    max_y.to_string().red().bold(),
+                    min_y.to_string().fg(app.theme.chart_fg).bold(),
+                    half_y.to_string().fg(app.theme.chart_fg).bold(),
+                    max_y.to_string().fg(app.theme.chart_fg).bold(),
                 ]);
 
             let legend_position = match &datasets.len() {
@@ -169,10 +173,10 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
 
 pub fn render_rename_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
     let block = Block::default().title("Rename").borders(Borders::ALL);
-    let input = Paragraph::new(app.inputs[RENAME as usize].buffer.as_str())
+    let input = Paragraph::new(app.input_buffer(RENAME))
         .style(match app.input_mode {
             InputMode::Normal => Style::default(),
-            InputMode::Input => Style::default().fg(Color::LightGreen),
+            InputMode::Input => Style::default().fg(app.theme.focus_fg),
         })
         .block(block);
     let area = centered_rect(60, 20, area);
@@ -193,9 +197,14 @@ pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .title("Active Queries"),
         )
-        .highlight_style(Style::new().add_modifier(Modifier::REVERSED).light_green())
+        .highlight_style(
+            Style::new()
+                .add_modifier(Modifier::REVERSED)
+                .fg(app.theme.chart_fg),
+        )
         .highlight_symbol(">>")
         .repeat_highlight_symbol(true);
 
@@ -206,11 +215,12 @@ pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
     let input = Paragraph::new(app.inputs[QUERY as usize].buffer.as_str())
         .style(match app.input_mode {
             InputMode::Normal => Style::default(),
-            InputMode::Input => Style::default().fg(Color::LightGreen),
+            InputMode::Input => Style::default().fg(app.theme.focus_fg),
         })
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .title("Enter query: "),
         );
     frame.render_widget(input, area);
@@ -227,10 +237,10 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
                     .marker(Marker::Braille)
                     .graph_type(GraphType::Line)
                     .style(match facet.as_str() {
-                        ".NET" => Style::default().cyan(),
-                        "Elasticsearch" => Style::default().yellow(),
-                        "Web external" => Style::default().light_red(),
-                        "value" => Style::default().light_magenta(),
+                        ".NET" => Style::default().fg(app.theme.net_fg),
+                        "Elasticsearch" => Style::default().fg(app.theme.elastic_fg),
+                        "Web external" => Style::default().fg(app.theme.webex_fg),
+                        "value" => Style::default().fg(app.theme.value_fg),
                         _ => Style::default(),
                     })
             })
@@ -256,32 +266,32 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
 
             // Create the X axis and define its properties
             let x_axis = Axis::default()
-                .title("Time".red())
-                .style(Style::default().red())
+                .title("Time".fg(app.theme.chart_fg))
+                .style(Style::default().fg(app.theme.chart_fg))
                 .bounds([min_x, Utc::now().timestamp() as f64])
                 .labels(vec![
                     DateTime::from_timestamp(min_x as i64, 0)
                         .unwrap()
                         .time()
                         .to_string()
-                        .red()
+                        .fg(app.theme.chart_fg)
                         .bold(),
                     DateTime::from_timestamp(Utc::now().timestamp(), 0)
                         .unwrap()
                         .to_string()
-                        .red()
+                        .fg(app.theme.chart_fg)
                         .bold(),
                 ]);
 
             // Create the Y axis and define its properties
             let y_axis = Axis::default()
-                .title(selection.clone().red())
-                .style(Style::default().red())
+                .title(selection.clone().fg(app.theme.chart_fg))
+                .style(Style::default().fg(app.theme.chart_fg))
                 .bounds([min_y, max_y])
                 .labels(vec![
-                    min_y.to_string().red().bold(),
-                    half_y.to_string().red().bold(),
-                    max_y.to_string().red().bold(),
+                    min_y.to_string().fg(app.theme.chart_fg).bold(),
+                    half_y.to_string().fg(app.theme.chart_fg).bold(),
+                    max_y.to_string().fg(app.theme.chart_fg).bold(),
                 ]);
 
             let legend_position = match &datasets.len() {
@@ -291,7 +301,13 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
 
             // Create the chart and link all the parts together
             let chart = Chart::new(datasets)
-                .block(Block::default().borders(Borders::ALL).title("Chart"))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(app.theme.chart_fg))
+                        .border_type(BorderType::Thick)
+                        .border_type(BorderType::Rounded),
+                )
                 .legend_position(legend_position)
                 .x_axis(x_axis)
                 .y_axis(y_axis);

@@ -13,6 +13,7 @@ use crossterm::{
 use ratatui::{backend::CrosstermBackend, Terminal};
 use reqwest::Client;
 use server::NewRelicClient;
+use ui::PALETTES;
 
 use std::{
     collections::BTreeMap,
@@ -49,11 +50,11 @@ fn main() -> io::Result<()> {
     };
 
     // Construct the path to Application Support directory
-    let mut cache_path = PathBuf::from(home_dir);
-    cache_path.push("Library/Application Support/xrelic/cache.yaml");
-    let cache_str = fs::read_to_string(cache_path).expect("ERROR: Could not read cache file!");
-    let cache: Option<BTreeMap<String, String>> =
-        serde_yaml::from_str(&cache_str).expect("ERROR: Could not deserialize cache file!");
+    let mut session_path = PathBuf::from(home_dir);
+    session_path.push("Library/Application Support/xrelic/session.yaml");
+    let yaml = fs::read_to_string(session_path).expect("ERROR: Could not read session file!");
+    let session: Option<BTreeMap<String, String>> =
+        serde_yaml::from_str(&yaml).expect("ERROR: Could not deserialize session file!");
 
     let mut client = NewRelicClient::builder();
     client
@@ -65,7 +66,7 @@ fn main() -> io::Result<()> {
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.show_cursor()?;
     let backend = Backend::new(client);
-    let app = App::new(THEME, backend, cache);
+    let app = App::new(&PALETTES[6], backend, session);
 
     app.run(&mut terminal).unwrap();
 
