@@ -4,14 +4,14 @@ use ratatui::{
     prelude::*,
     widgets::{
         Axis, Block, BorderType, Borders, Chart, Clear, Dataset, GraphType, LegendPosition, List,
-        Paragraph,
+        Padding, Paragraph,
     },
 };
 use style::palette::tailwind;
 use tui_big_text::{BigText, PixelSize};
 
 use crate::{
-    app::{InputMode, QUERY, RENAME, SESSION_LOAD},
+    app::{Focus, InputMode, QUERY, RENAME, SESSION_LOAD},
     App,
 };
 
@@ -27,10 +27,13 @@ pub const PALETTES: [tailwind::Palette; 9] = [
     tailwind::SKY,
 ];
 
+pub fn render_loading(app: &mut App, frame: &mut Frame, area: Rect) {}
+
 pub fn render_load_session(app: &mut App, frame: &mut Frame, area: Rect) {
-    let block = Block::default()
-        .title("Load session?")
-        .borders(Borders::ALL);
+    let area = centered_rect(60, 20, area);
+    let vertical = Layout::vertical([Constraint::Length(3), Constraint::Length(3)]);
+    let [prompt_area, input_area] = vertical.areas(area);
+
     let prompt =
         Text::from("A previous session was found. Would you like to reload its queries? y/n");
     let input = Paragraph::new(app.input_buffer(SESSION_LOAD))
@@ -38,11 +41,15 @@ pub fn render_load_session(app: &mut App, frame: &mut Frame, area: Rect) {
             InputMode::Normal => Style::default(),
             InputMode::Input => Style::default().fg(app.theme.focus_fg),
         })
-        .block(block);
-    let area = centered_rect(60, 20, area);
-    frame.render_widget(prompt, area);
+        .block(
+            Block::default()
+                .padding(Padding::zero())
+                .borders(Borders::BOTTOM)
+                .border_type(BorderType::Rounded),
+        );
     frame.render_widget(Clear, area);
-    frame.render_widget(input, area);
+    frame.render_widget(prompt, prompt_area);
+    frame.render_widget(input, input_area);
 }
 
 pub fn render_dashboard(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -172,16 +179,25 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
 }
 
 pub fn render_rename_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
-    let block = Block::default().title("Rename").borders(Borders::ALL);
-    let input = Paragraph::new(app.input_buffer(RENAME))
-        .style(match app.input_mode {
-            InputMode::Normal => Style::default(),
-            InputMode::Input => Style::default().fg(app.theme.focus_fg),
-        })
-        .block(block);
     let area = centered_rect(60, 20, area);
+    let vertical = Layout::vertical([Constraint::Length(3), Constraint::Length(3)]);
+    let [prompt_area, input_area] = vertical.areas(area);
+
+    let prompt = Text::from("Rename query");
+    let input = Paragraph::new(app.input_buffer(RENAME))
+        .style(match app.focus {
+            Focus::Rename => Style::default().fg(app.theme.focus_fg),
+            _ => Style::default(),
+        })
+        .block(
+            Block::default()
+                .padding(Padding::zero())
+                .borders(Borders::BOTTOM),
+        );
+
     frame.render_widget(Clear, area);
-    frame.render_widget(input, area);
+    frame.render_widget(prompt, prompt_area);
+    frame.render_widget(input, input_area);
 }
 
 pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -213,9 +229,9 @@ pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
 
 pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
     let input = Paragraph::new(app.inputs[QUERY as usize].buffer.as_str())
-        .style(match app.input_mode {
-            InputMode::Normal => Style::default(),
-            InputMode::Input => Style::default().fg(app.theme.focus_fg),
+        .style(match app.focus {
+            Focus::QueryInput => Style::default().fg(app.theme.focus_fg),
+            _ => Style::default(),
         })
         .block(
             Block::default()

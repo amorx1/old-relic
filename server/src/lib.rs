@@ -17,7 +17,6 @@ use reqwest::{
 pub mod application;
 pub mod newrelic;
 pub mod timeseries;
-pub mod trace;
 use serde::de::DeserializeOwned;
 
 use newrelic::QueryResponse;

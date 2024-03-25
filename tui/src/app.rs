@@ -1,9 +1,9 @@
 use crate::{
-    backend::{Backend as AppBackend, Bounds, Payload},
+    backend::{Backend as AppBackend, Bounds},
     query::{NRQLQuery, NRQL},
     ui::{
-        render_dashboard, render_graph, render_load_session, render_query_box, render_query_list,
-        render_rename_dialog,
+        render_dashboard, render_graph, render_load_session, render_loading, render_query_box,
+        render_query_list, render_rename_dialog,
     },
 };
 
@@ -28,6 +28,7 @@ pub const RENAME: isize = 1;
 pub const SESSION_LOAD: isize = 2;
 pub const DEFAULT: isize = 3;
 pub const DASHBOARD: isize = 4;
+pub const LOADING: isize = 5;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Focus {
@@ -35,6 +36,7 @@ pub enum Focus {
     Rename = RENAME,
     Dashboard = DASHBOARD,
     SessionLoad = SESSION_LOAD,
+    Loading = LOADING,
     Default = DEFAULT,
 }
 
@@ -141,16 +143,19 @@ impl App {
                             KeyCode::Char('j') => self.next(),
                             KeyCode::Char('k') => self.previous(),
                             KeyCode::Char('x') => self.delete(),
-                            KeyCode::Char('r') => {
-                                self.set_focus(Focus::Rename);
-                                self.input_mode = InputMode::Input;
-                            }
-                            KeyCode::Char('d') => {
-                                self.set_focus(match self.focus {
-                                    Focus::Dashboard => Focus::Default,
-                                    _ => Focus::Dashboard,
-                                });
-                            }
+                            KeyCode::Char('r') => match self.focus {
+                                Focus::QueryInput => {}
+                                _ => {
+                                    if self.datasets.len() != 0 {
+                                        self.set_focus(Focus::Rename);
+                                        self.input_mode = InputMode::Input;
+                                    }
+                                }
+                            },
+                            KeyCode::Char('d') => match self.focus {
+                                Focus::Dashboard => self.set_focus(Focus::Default),
+                                _ => self.set_focus(Focus::Dashboard),
+                            },
                             _ => (),
                         },
                         InputMode::Input if key.kind == KeyEventKind::Press => match key.code {
@@ -168,19 +173,23 @@ impl App {
                                         match self.input_buffer(SESSION_LOAD) {
                                             // Load session
                                             "y" | "Y" => {
-                                                if let Some(session_queries) = &self.session {
-                                                    session_queries.values().for_each(|q| {
-                                                        if let Ok(query) = q.trim().to_nrql() {
-                                                            self.add_query(query)
-                                                        }
-                                                    });
-                                                };
+                                                let mut session =
+                                                    self.session.clone().unwrap().into_iter();
+                                                while let Some((_alias, query)) = session.next() {
+                                                    if let Ok(query) = query.trim().to_nrql() {
+                                                        self.add_query(query);
+                                                        // self.set_focus(Focus::Loading);
+                                                    }
+                                                }
+                                                // };
                                             }
                                             // Don't load session
                                             _ => {}
                                         }
-                                        self.session.unwrap().clear();
+                                        // Clear previous session once loaded
                                         self.session = None;
+
+                                        // Update focus to home
                                         self.set_focus(Focus::Default);
                                     }
                                     _ => {}
@@ -203,6 +212,7 @@ impl App {
                                 self.move_cursor_right();
                             }
                             KeyCode::Esc => {
+                                self.set_focus(Focus::Default);
                                 self.input_mode = InputMode::Normal;
                             }
                             _ => {}
@@ -234,6 +244,9 @@ impl App {
     }
 
     pub fn ui(&mut self, frame: &mut Frame) {
+        if self.focus == Focus::Loading {
+            render_loading(self, frame, frame.size());
+        }
         if self.focus == Focus::SessionLoad {
             render_load_session(self, frame, frame.size());
             return;
