@@ -11,7 +11,10 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     backend::Backend,
     layout::{Constraint, Layout},
-    style::{palette::tailwind::Palette, Color},
+    style::{
+        palette::tailwind::{self, Palette},
+        Color,
+    },
     widgets::ListState,
     Frame, Terminal,
 };
@@ -109,7 +112,7 @@ impl App {
                 chart_fg: palette.c900,
                 elastic_fg: palette.c400,
                 net_fg: palette.c400,
-                webex_fg: palette.c400,
+                webex_fg: tailwind::AMBER.c400,
                 value_fg: palette.c400,
             },
             input_mode: InputMode::Normal,
@@ -356,6 +359,7 @@ impl App {
             .expect("ERROR: Could not index query for deletion!");
 
         let (removed, _) = self.datasets.remove_entry(&to_delete).unwrap();
+        // TODO: Fix deleted queries reappearing on new data!
         _ = self.backend.ui_tx.send(removed);
     }
 
@@ -399,6 +403,7 @@ impl App {
             .to_owned();
     }
 
+    // TODO: Prompt user for session save on exit (q)
     pub fn save_session(&self) {
         let output = self
             .datasets
