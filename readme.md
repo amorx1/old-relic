@@ -9,4 +9,4 @@ New Relic APM TUI client.
  - [x] Save/load state
  - [x] Dashboard view
  - [x] Theming
- - [] Advanced NRQL parser
+ - [ ] Advanced NRQL parser
