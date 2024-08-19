@@ -26,21 +26,14 @@ use std::{
 };
 use tokio::io;
 
-pub const QUERY: isize = 0;
-pub const RENAME: isize = 1;
-pub const SESSION_LOAD: isize = 2;
-pub const DEFAULT: isize = 3;
-pub const DASHBOARD: isize = 4;
-pub const LOADING: isize = 5;
-
 #[derive(Clone, Copy, PartialEq)]
 pub enum Focus {
-    QueryInput = QUERY,
-    Rename = RENAME,
-    Dashboard = DASHBOARD,
-    SessionLoad = SESSION_LOAD,
-    Loading = LOADING,
-    Default = DEFAULT,
+    QueryInput = 0,
+    Rename = 1,
+    Dashboard = 4,
+    SessionLoad = 2,
+    Loading = 5,
+    Default = 3,
 }
 
 pub enum InputMode {
@@ -72,13 +65,87 @@ pub struct Theme {
 pub struct App {
     pub session: Option<BTreeMap<String, String>>,
     pub theme: Theme,
-    pub inputs: [Input; 4],
+    pub inputs: Inputs,
     pub input_mode: InputMode,
     pub focus: Focus,
     pub backend: AppBackend,
     pub selected_query: String,
     pub list_state: ListState,
     pub datasets: BTreeMap<String, Dataset>,
+}
+
+pub struct Inputs {
+    _inputs: [Input; 4],
+}
+
+impl Inputs {
+    pub fn get(&self, focus: Focus) -> &str {
+        &self._inputs[focus as usize].buffer
+    }
+
+    pub fn get_cursor_position(&self, focus: Focus) -> usize {
+        self._inputs[focus as usize].cursor_position
+    }
+
+    pub fn len(&self, focus: Focus) -> usize {
+        self._inputs[focus as usize].buffer.len()
+    }
+
+    fn clamp_cursor(&self, focus: Focus, new_cursor_pos: usize) -> usize {
+        new_cursor_pos.clamp(0, self.len(focus))
+    }
+
+    fn move_cursor_left(&mut self, focus: Focus) {
+        let cursor_moved_left = self._inputs[focus as usize]
+            .cursor_position
+            .saturating_sub(1);
+        self._inputs[focus as usize].cursor_position = self.clamp_cursor(focus, cursor_moved_left);
+    }
+
+    fn move_cursor_right(&mut self, focus: Focus) {
+        let cursor_moved_right = self._inputs[focus as usize]
+            .cursor_position
+            .saturating_add(1);
+        self._inputs[focus as usize].cursor_position = self.clamp_cursor(focus, cursor_moved_right);
+    }
+
+    fn enter_char(&mut self, focus: Focus, new_char: char) {
+        let cursor_position = self.get_cursor_position(focus);
+        self._inputs[focus as usize]
+            .buffer
+            .insert(cursor_position, new_char);
+
+        self.move_cursor_right(focus);
+    }
+
+    fn delete_char(&mut self, focus: Focus) {
+        let is_not_cursor_leftmost = self.get_cursor_position(focus) != 0;
+        if is_not_cursor_leftmost {
+            let current_index = self.get_cursor_position(focus);
+            let from_left_to_current_index = current_index - 1;
+
+            let before_char_to_delete = self._inputs[focus as usize]
+                .buffer
+                .chars()
+                .take(from_left_to_current_index);
+            let after_char_to_delete = self._inputs[focus as usize]
+                .buffer
+                .chars()
+                .skip(current_index);
+
+            self._inputs[focus as usize].buffer =
+                before_char_to_delete.chain(after_char_to_delete).collect();
+            self.move_cursor_left(focus);
+        }
+    }
+
+    pub fn clear(&mut self, focus: Focus) {
+        self._inputs[focus as usize].buffer.clear();
+    }
+
+    pub fn reset_cursor(&mut self, focus: Focus) {
+        self._inputs[focus as usize].cursor_position = 0;
+    }
 }
 
 impl App {
@@ -88,24 +155,26 @@ impl App {
         session: Option<BTreeMap<String, String>>,
     ) -> Self {
         Self {
-            inputs: [
-                Input {
-                    buffer: "".to_owned(),
-                    cursor_position: 0,
-                },
-                Input {
-                    buffer: "".to_owned(),
-                    cursor_position: 0,
-                },
-                Input {
-                    buffer: "".to_owned(),
-                    cursor_position: 0,
-                },
-                Input {
-                    buffer: "".to_owned(),
-                    cursor_position: 0,
-                },
-            ],
+            inputs: Inputs {
+                _inputs: [
+                    Input {
+                        buffer: String::new(),
+                        cursor_position: 0,
+                    },
+                    Input {
+                        buffer: String::new(),
+                        cursor_position: 0,
+                    },
+                    Input {
+                        buffer: String::new(),
+                        cursor_position: 0,
+                    },
+                    Input {
+                        buffer: String::new(),
+                        cursor_position: 0,
+                    },
+                ],
+            },
             session,
             theme: Theme {
                 focus_fg: palette.c500,
@@ -145,7 +214,7 @@ impl App {
                             }
                             KeyCode::Char('j') => self.next(),
                             KeyCode::Char('k') => self.previous(),
-                            KeyCode::Char('x') => self.delete(),
+                            KeyCode::Char('x') => self.delete_query(),
                             KeyCode::Char('r') => match self.focus {
                                 Focus::QueryInput => {}
                                 _ => {
@@ -165,7 +234,9 @@ impl App {
                             KeyCode::Enter => {
                                 match self.focus {
                                     Focus::QueryInput => {
-                                        if let Ok(query) = self.input_buffer(QUERY).to_nrql() {
+                                        if let Ok(query) =
+                                            self.inputs.get(Focus::QueryInput).to_nrql()
+                                        {
                                             self.add_query(query);
                                         }
                                     }
@@ -173,7 +244,7 @@ impl App {
                                         self.rename_current_query();
                                     }
                                     Focus::SessionLoad => {
-                                        match self.input_buffer(SESSION_LOAD) {
+                                        match self.inputs.get(Focus::SessionLoad) {
                                             // Load session
                                             "y" | "Y" => {
                                                 let session =
@@ -197,22 +268,22 @@ impl App {
                                     }
                                     _ => {}
                                 };
-                                self.inputs[self.focus as usize].buffer.clear();
-                                self.reset_cursor();
+                                self.inputs.clear(self.focus);
+                                self.inputs.reset_cursor(self.focus);
                                 self.set_focus(Focus::Default);
                                 self.input_mode = InputMode::Normal;
                             }
                             KeyCode::Char(to_insert) => {
-                                self.enter_char(to_insert);
+                                self.inputs.enter_char(self.focus, to_insert);
                             }
                             KeyCode::Backspace => {
-                                self.delete_char();
+                                self.inputs.delete_char(self.focus);
                             }
                             KeyCode::Left => {
-                                self.move_cursor_left();
+                                self.inputs.move_cursor_left(self.focus);
                             }
                             KeyCode::Right => {
-                                self.move_cursor_right();
+                                self.inputs.move_cursor_right(self.focus);
                             }
                             KeyCode::Esc => {
                                 self.set_focus(Focus::Default);
@@ -282,74 +353,18 @@ impl App {
     fn rename_current_query(&mut self) {
         self.datasets
             .entry(self.selected_query.to_owned())
-            .and_modify(|v| v.query_alias = Some(self.inputs[RENAME as usize].buffer.to_owned()));
-    }
-
-    pub fn input_buffer(&self, focus: isize) -> &str {
-        self.inputs[focus as usize].buffer.as_str()
+            .and_modify(|v| v.query_alias = Some(self.inputs.get(Focus::Rename).to_owned()));
     }
 
     fn add_query(&self, query: NRQLQuery) {
         self.backend.add_query(query);
     }
 
-    fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
-        new_cursor_pos.clamp(0, self.inputs[self.focus as usize].buffer.len())
-    }
-
-    fn reset_cursor(&mut self) {
-        self.inputs[self.focus as usize].cursor_position = 0;
-    }
-
-    fn move_cursor_left(&mut self) {
-        let cursor_moved_left = self.inputs[self.focus as usize]
-            .cursor_position
-            .saturating_sub(1);
-        self.inputs[self.focus as usize].cursor_position = self.clamp_cursor(cursor_moved_left);
-    }
-
-    fn move_cursor_right(&mut self) {
-        let cursor_moved_right = self.inputs[self.focus as usize]
-            .cursor_position
-            .saturating_add(1);
-        self.inputs[self.focus as usize].cursor_position = self.clamp_cursor(cursor_moved_right);
-    }
-
-    fn enter_char(&mut self, new_char: char) {
-        let cursor_position = self.inputs[self.focus as usize].cursor_position;
-        self.inputs[self.focus as usize]
-            .buffer
-            .insert(cursor_position, new_char);
-
-        self.move_cursor_right();
-    }
-
-    fn delete_char(&mut self) {
-        let is_not_cursor_leftmost = self.inputs[self.focus as usize].cursor_position != 0;
-        if is_not_cursor_leftmost {
-            let current_index = self.inputs[self.focus as usize].cursor_position;
-            let from_left_to_current_index = current_index - 1;
-
-            let before_char_to_delete = self.inputs[self.focus as usize]
-                .buffer
-                .chars()
-                .take(from_left_to_current_index);
-            let after_char_to_delete = self.inputs[self.focus as usize]
-                .buffer
-                .chars()
-                .skip(current_index);
-
-            self.inputs[self.focus as usize].buffer =
-                before_char_to_delete.chain(after_char_to_delete).collect();
-            self.move_cursor_left();
-        }
-    }
-
     pub fn set_focus(&mut self, focus: Focus) {
         self.focus = focus
     }
 
-    pub fn delete(&mut self) {
+    pub fn delete_query(&mut self) {
         let i = self.list_state.selected().unwrap();
         let to_delete = self
             .datasets

@@ -11,7 +11,7 @@ use style::palette::tailwind;
 use tui_big_text::{BigText, PixelSize};
 
 use crate::{
-    app::{Focus, InputMode, QUERY, RENAME, SESSION_LOAD},
+    app::{Focus, InputMode},
     App,
 };
 
@@ -36,7 +36,7 @@ pub fn render_load_session(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let prompt =
         Text::from("A previous session was found. Would you like to reload its queries? y/n");
-    let input = Paragraph::new(app.input_buffer(SESSION_LOAD))
+    let input = Paragraph::new(app.inputs.get(Focus::SessionLoad))
         .style(match app.input_mode {
             InputMode::Normal => Style::default(),
             InputMode::Input => Style::default().fg(app.theme.focus_fg),
@@ -54,7 +54,7 @@ pub fn render_load_session(app: &mut App, frame: &mut Frame, area: Rect) {
 
 pub fn render_dashboard(app: &mut App, frame: &mut Frame, area: Rect) {
     let n_graphs = &app.datasets.len();
-    let areas = match *n_graphs {
+    let areas = match n_graphs {
         0 => vec![],
         1 => vec![area],
         2 => {
@@ -184,7 +184,7 @@ pub fn render_rename_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
     let [prompt_area, input_area] = vertical.areas(area);
 
     let prompt = Text::from("Rename query");
-    let input = Paragraph::new(app.input_buffer(RENAME))
+    let input = Paragraph::new(app.inputs.get(Focus::Rename))
         .style(match app.focus {
             Focus::Rename => Style::default().fg(app.theme.focus_fg),
             _ => Style::default(),
@@ -228,7 +228,7 @@ pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
-    let input = Paragraph::new(app.inputs[QUERY as usize].buffer.as_str())
+    let input = Paragraph::new(app.inputs.get(Focus::QueryInput))
         .style(match app.focus {
             Focus::QueryInput => Style::default().fg(app.theme.focus_fg),
             _ => Style::default(),

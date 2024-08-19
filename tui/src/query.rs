@@ -63,3 +63,61 @@ impl NRQL for &str {
 pub trait NRQL {
     fn to_nrql(self) -> Result<NRQLQuery>;
 }
+
+#[derive(Default, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryResponse<T> {
+    pub data: Data<T>,
+}
+
+#[derive(Default, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Data<T> {
+    pub actor: Actor<T>,
+}
+
+#[derive(Default, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Actor<T> {
+    pub account: Account<T>,
+}
+
+#[derive(Default, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Account<T> {
+    pub nrql: Nrql<T>,
+}
+
+#[derive(Default, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Nrql<T> {
+    pub results: Vec<T>,
+}
+
+#[derive(Default, Debug, Deserialize, PartialEq, PartialOrd)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeseriesResult {
+    pub begin_time_seconds: f64,
+    pub end_time_seconds: f64,
+    pub facet: Option<String>,
+    pub value: f64,
+}
+
+#[derive(Debug)]
+pub struct Timeseries {
+    pub begin_time_seconds: f64,
+    pub end_time_seconds: f64,
+    pub facet: Option<String>,
+    pub value: f64,
+}
+
+impl From<TimeseriesResult> for Timeseries {
+    fn from(val: TimeseriesResult) -> Timeseries {
+        Timeseries {
+            begin_time_seconds: val.begin_time_seconds,
+            end_time_seconds: val.end_time_seconds,
+            facet: val.facet.clone(),
+            value: val.value,
+        }
+    }
+}

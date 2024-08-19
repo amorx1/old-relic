@@ -1,3 +1,4 @@
+use crate::query::{Timeseries, TimeseriesResult};
 use anyhow::Result;
 use std::{
     collections::BTreeMap,
@@ -9,16 +10,10 @@ use tokio::{
     time::sleep,
 };
 
-use anyhow::anyhow;
 use chrono::{Timelike, Utc};
 use crossbeam_channel::{unbounded, Receiver as MReceiver, Sender as MSender};
-use reqwest::{
-    header::{HeaderMap, HeaderValue},
-    Client, ClientBuilder, Method,
-};
 
-use serde::{de::DeserializeOwned, Deserialize};
-
+use crate::client::NewRelicClient;
 use crate::query::NRQLQuery;
 
 #[derive(Clone, Copy)]
@@ -86,7 +81,8 @@ pub async fn refresh_timeseries(
                 return Ok(());
             }
         }
-        if Utc::now().second() % 5 == 0 {
+
+        if Utc::now().second() % 10 == 0 {
             let data = client
                 .query::<TimeseriesResult>(query.to_string().unwrap())
                 .await
@@ -131,167 +127,5 @@ pub async fn refresh_timeseries(
             })?
         }
         sleep(Duration::from_millis(16)).await;
-    }
-}
-
-static QUERY_BASE: &str = r#"{ "query":  "{ actor { account(id: $account) { nrql(query: \"$query\") { results } } } }" }"#;
-
-#[derive(Clone)]
-pub struct NewRelicClient {
-    url: Option<String>,
-    account: Option<i64>,
-    api_key: Option<String>,
-    client: Option<Client>,
-}
-
-impl NewRelicClient {
-    pub fn builder() -> Self {
-        NewRelicClient {
-            url: None,
-            account: None,
-            api_key: None,
-            client: None,
-        }
-    }
-
-    pub fn url(&mut self, url: &'static str) -> &mut Self {
-        self.url = Some(url.to_owned());
-        self
-    }
-
-    pub fn account(&mut self, account: &'static i64) -> &mut Self {
-        self.account = Some(account.to_owned());
-        self
-    }
-
-    pub fn api_key(&mut self, key: &'static str) -> &mut Self {
-        self.api_key = Some(key.to_owned());
-        self
-    }
-
-    pub fn http_client(&mut self, client: ClientBuilder) -> &Self {
-        let mut headers = HeaderMap::new();
-        headers.append(
-            "Content-Type",
-            HeaderValue::from_str("application/json").unwrap(),
-        );
-        headers.append(
-            "API-Key",
-            HeaderValue::from_str(
-                self.api_key
-                    .as_ref()
-                    .expect("ERROR: API Key must be provided first!"),
-            )
-            .unwrap(),
-        );
-
-        self.client = Some(client.default_headers(headers).build().unwrap());
-
-        self
-    }
-
-    pub async fn query<T: DeserializeOwned + std::fmt::Debug + Default>(
-        &self,
-        query_str: impl AsRef<str>,
-    ) -> Option<Vec<T>> {
-        // dbg!(&query_str);
-
-        let response = self
-            .client
-            .clone()?
-            .request(Method::POST, self.url.clone()?)
-            .body(
-                QUERY_BASE
-                    .replace(
-                        "$account",
-                        &self
-                            .account
-                            .expect("ERROR: No account number linked to client!")
-                            .to_string(),
-                    )
-                    .replace("$query", query_str.as_ref()),
-            )
-            .send()
-            .await;
-
-        if let Ok(data) = response {
-            let json = data
-                .json::<QueryResponse<T>>()
-                .await
-                .map_err(|e| anyhow!(e))
-                .expect("ERROR: Error in response deserialization schema");
-
-            // dbg!(&json);
-            return Some(json.data.actor.account.nrql.results);
-        }
-
-        None
-    }
-}
-
-#[derive(Default, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct QueryResponse<T> {
-    pub data: Data<T>,
-}
-
-#[derive(Default, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Data<T> {
-    pub actor: Actor<T>,
-}
-
-#[derive(Default, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Actor<T> {
-    pub account: Account<T>,
-}
-
-#[derive(Default, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Account<T> {
-    pub nrql: Nrql<T>,
-}
-
-#[derive(Default, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Nrql<T> {
-    pub results: Vec<T>,
-}
-
-#[derive(Default, Debug, Deserialize, PartialEq, PartialOrd)]
-#[serde(rename_all = "camelCase")]
-pub struct TimeseriesResult {
-    pub begin_time_seconds: f64,
-    pub end_time_seconds: f64,
-    pub facet: Option<String>,
-    pub value: f64,
-}
-
-#[derive(Debug)]
-pub struct Timeseries {
-    pub begin_time_seconds: f64,
-    pub end_time_seconds: f64,
-    pub facet: Option<String>,
-    pub value: f64,
-}
-
-impl Timeseries {
-    pub fn plot(&self) -> ((f64, f64), (f64, f64)) {
-        (
-            (self.begin_time_seconds, self.value),
-            (self.end_time_seconds, self.value),
-        )
-    }
-}
-
-impl From<TimeseriesResult> for Timeseries {
-    fn from(val: TimeseriesResult) -> Timeseries {
-        Timeseries {
-            begin_time_seconds: val.begin_time_seconds,
-            end_time_seconds: val.end_time_seconds,
-            facet: val.facet.clone(),
-            value: val.value,
-        }
     }
 }

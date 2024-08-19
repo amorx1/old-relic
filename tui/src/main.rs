@@ -1,12 +1,13 @@
 mod app;
 mod backend;
+mod client;
 pub mod parser;
 pub mod query;
 mod ui;
 
 use app::App;
 use backend::Backend;
-use backend::NewRelicClient;
+use client::NewRelicClient;
 use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
@@ -23,7 +24,7 @@ use std::{
     sync::OnceLock,
 };
 
-static THEME: usize = 6;
+static THEME: usize = 7;
 const ENDPOINT: &str = "https://api.newrelic.com/graphql";
 static ACCOUNT: OnceLock<i64> = OnceLock::new();
 static API_KEY: OnceLock<String> = OnceLock::new();
