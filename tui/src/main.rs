@@ -6,13 +6,13 @@ mod ui;
 
 use app::App;
 use backend::Backend;
+use backend::NewRelicClient;
 use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use reqwest::Client;
-use server::NewRelicClient;
 use ui::PALETTES;
 
 use std::{
