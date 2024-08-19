@@ -1,5 +1,3 @@
-use std::ops::Add;
-
 use anyhow::Result;
 use serde::Deserialize;
 
@@ -37,7 +35,7 @@ impl NRQLQuery {
         query += format!("SINCE {} ", self.since).as_str();
         query += format!("UNTIL {} ", self.until).as_str();
         query += format!("LIMIT {} ", self.limit).as_str();
-        query += format!("{}", self.mode).as_str();
+        query += self.mode.to_string().as_str();
 
         Ok(query.to_string())
     }

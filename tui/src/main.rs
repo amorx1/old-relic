@@ -19,7 +19,7 @@ use std::{
     collections::BTreeMap,
     env, fs,
     io::{self, stdout},
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::OnceLock,
 };
 

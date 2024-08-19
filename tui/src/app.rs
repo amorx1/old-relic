@@ -20,8 +20,8 @@ use ratatui::{
 };
 use std::{
     collections::{btree_map::Entry, BTreeMap},
-    fs::File,
-    io::Write,
+    // fs::File,
+    // io::Write,
     time::Duration,
 };
 use tokio::io;
@@ -149,7 +149,7 @@ impl App {
                             KeyCode::Char('r') => match self.focus {
                                 Focus::QueryInput => {}
                                 _ => {
-                                    if self.datasets.len() != 0 {
+                                    if !self.datasets.is_empty() {
                                         self.set_focus(Focus::Rename);
                                         self.input_mode = InputMode::Input;
                                     }
@@ -176,9 +176,9 @@ impl App {
                                         match self.input_buffer(SESSION_LOAD) {
                                             // Load session
                                             "y" | "Y" => {
-                                                let mut session =
+                                                let session =
                                                     self.session.clone().unwrap().into_iter();
-                                                while let Some((_alias, query)) = session.next() {
+                                                for (_alias, query) in session {
                                                     if let Ok(query) = query.trim().to_nrql() {
                                                         self.add_query(query);
                                                         // self.set_focus(Focus::Loading);
@@ -364,6 +364,10 @@ impl App {
     }
 
     pub fn next(&mut self) {
+        if self.datasets.is_empty() {
+            return;
+        }
+
         let i = match self.list_state.selected() {
             Some(i) => {
                 if i >= self.datasets.len() - 1 {
@@ -384,6 +388,10 @@ impl App {
     }
 
     pub fn previous(&mut self) {
+        if self.datasets.is_empty() {
+            return;
+        }
+
         let i = match self.list_state.selected() {
             Some(i) => {
                 if i == 0 {
@@ -404,22 +412,22 @@ impl App {
     }
 
     // TODO: Prompt user for session save on exit (q)
-    pub fn save_session(&self) {
-        let output = self
-            .datasets
-            .iter()
-            .map(|(q, data)| {
-                (
-                    data.query_alias.clone().unwrap_or(q.to_owned()),
-                    q.to_owned(),
-                )
-            })
-            .collect::<BTreeMap<String, String>>();
+    // pub fn save_session(&self) {
+    //     let output = self
+    //         .datasets
+    //         .iter()
+    //         .map(|(q, data)| {
+    //             (
+    //                 data.query_alias.clone().unwrap_or(q.to_owned()),
+    //                 q.to_owned(),
+    //             )
+    //         })
+    //         .collect::<BTreeMap<String, String>>();
 
-        let yaml: String =
-            serde_yaml::to_string(&output).expect("ERROR: Could not serialize queries!");
-        let mut file = File::open("").expect("ERROR: Could not open file!");
-        file.write_all(yaml.as_bytes())
-            .expect("ERROR: Could not write to file!");
-    }
+    //     let yaml: String =
+    //         serde_yaml::to_string(&output).expect("ERROR: Could not serialize queries!");
+    //     let mut file = File::open("").expect("ERROR: Could not open file!");
+    //     file.write_all(yaml.as_bytes())
+    //         .expect("ERROR: Could not write to file!");
+    // }
 }
