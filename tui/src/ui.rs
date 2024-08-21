@@ -89,13 +89,7 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
                     .data(&points[..])
                     .marker(Marker::Braille)
                     .graph_type(GraphType::Line)
-                    .style(match facet.as_str() {
-                        ".NET" => Style::default().fg(app.theme.net_fg),
-                        "Elasticsearch" => Style::default().fg(app.theme.elastic_fg),
-                        "Web external" => Style::default().fg(app.theme.webex_fg),
-                        "value" => Style::default().fg(app.theme.value_fg),
-                        _ => Style::default(),
-                    })
+                    .style(Style::default().fg(app.facet_colours.get(facet).unwrap().to_owned()))
             })
             .collect::<Vec<_>>()
     });
@@ -252,13 +246,7 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
                     .data(&points[..])
                     .marker(Marker::Braille)
                     .graph_type(GraphType::Line)
-                    .style(match facet.as_str() {
-                        ".NET" => Style::default().fg(app.theme.net_fg),
-                        "Elasticsearch" => Style::default().fg(app.theme.elastic_fg),
-                        "Web external" => Style::default().fg(app.theme.webex_fg),
-                        "value" => Style::default().fg(app.theme.value_fg),
-                        _ => Style::default(),
-                    })
+                    .style(Style::default().fg(app.facet_colours.get(facet).unwrap().to_owned()))
             })
             .collect::<Vec<_>>()
     });

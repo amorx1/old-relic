@@ -24,7 +24,7 @@ use std::{
     sync::OnceLock,
 };
 
-static THEME: usize = 7;
+static THEME: usize = 6;
 const ENDPOINT: &str = "https://api.newrelic.com/graphql";
 static ACCOUNT: OnceLock<i64> = OnceLock::new();
 static API_KEY: OnceLock<String> = OnceLock::new();

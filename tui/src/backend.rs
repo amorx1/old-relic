@@ -24,6 +24,7 @@ pub struct Bounds {
 
 pub struct Payload {
     pub query: String,
+    pub facets: Vec<String>,
     pub data: BTreeMap<String, Vec<(f64, f64)>>,
     pub bounds: Bounds,
     pub selection: String,
@@ -100,9 +101,11 @@ pub async fn refresh_timeseries(
             }
 
             let mut facets: BTreeMap<String, Vec<(f64, f64)>> = BTreeMap::default();
+            let mut facet_keys: Vec<String> = vec![];
 
             for data in data.into_iter().map(Timeseries::from) {
                 let facet = &data.facet.unwrap_or(String::from("value"));
+                facet_keys.push(facet.to_owned());
                 if facets.contains_key(facet) {
                     facets
                         .get_mut(facet)
@@ -118,6 +121,7 @@ pub async fn refresh_timeseries(
 
             data_tx.send(Payload {
                 query: query.to_string().unwrap(),
+                facets: facet_keys,
                 data: facets,
                 bounds: Bounds {
                     mins: min_bounds,

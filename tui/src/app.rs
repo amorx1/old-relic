@@ -8,6 +8,7 @@ use crate::{
 };
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use rand::{thread_rng, Rng};
 use ratatui::{
     backend::Backend,
     layout::{Constraint, Layout},
@@ -72,6 +73,7 @@ pub struct App {
     pub selected_query: String,
     pub list_state: ListState,
     pub datasets: BTreeMap<String, Dataset>,
+    pub facet_colours: BTreeMap<String, Color>,
 }
 
 pub struct Inputs {
@@ -190,10 +192,12 @@ impl App {
             selected_query: String::new(),
             list_state: ListState::default(),
             datasets: BTreeMap::default(),
+            facet_colours: BTreeMap::default(),
         }
     }
 
     pub fn run<B: Backend>(mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
+        let mut rng = thread_rng();
         loop {
             terminal.draw(|f| self.ui(f))?;
 
@@ -312,6 +316,17 @@ impl App {
                             data.facets = payload.data;
                             data.bounds = payload.bounds;
                         })
+                }
+
+                for facet_key in payload.facets {
+                    // Only add facet key if not present
+                    if let Entry::Vacant(e) = self.facet_colours.entry(facet_key) {
+                        e.insert(Color::Rgb(
+                            rng.gen::<u8>(),
+                            rng.gen::<u8>(),
+                            rng.gen::<u8>(),
+                        ));
+                    }
                 }
             }
         }
