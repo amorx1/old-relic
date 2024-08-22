@@ -1,5 +1,5 @@
 use crate::{
-    backend::{Backend as AppBackend, Bounds},
+    backend::{Backend as AppBackend, Bounds, UIEvent},
     query::{NRQLQuery, NRQL},
     ui::{
         render_dashboard, render_graph, render_load_session, render_loading, render_query_box,
@@ -21,8 +21,10 @@ use ratatui::{
 };
 use std::{
     collections::{btree_map::Entry, BTreeMap},
-    // fs::File,
-    // io::Write,
+    env,
+    fs::OpenOptions,
+    io::Write,
+    path::PathBuf,
     time::Duration,
 };
 use tokio::io;
@@ -211,7 +213,10 @@ impl App {
                 if let Event::Key(key) = event::read()? {
                     match self.input_mode {
                         InputMode::Normal if key.kind == KeyEventKind::Press => match key.code {
-                            KeyCode::Char('q') => return Ok(()),
+                            KeyCode::Char('q') => {
+                                self.save_session();
+                                return Ok(());
+                            }
                             KeyCode::Char('e') => {
                                 self.set_focus(Focus::QueryInput);
                                 self.input_mode = InputMode::Input;
@@ -253,9 +258,17 @@ impl App {
                                             "y" | "Y" => {
                                                 let session =
                                                     self.session.clone().unwrap().into_iter();
-                                                for (_alias, query) in session {
-                                                    if let Ok(query) = query.trim().to_nrql() {
-                                                        self.add_query(query);
+                                                for (alias, query) in session {
+                                                    // TODO: Avoid
+                                                    let clean_query = query.replace("as value", "");
+                                                    if let Ok(parsed_query) =
+                                                        clean_query.trim().to_nrql()
+                                                    {
+                                                        self.add_query(parsed_query.clone());
+                                                        self.rename_query(
+                                                            parsed_query.to_string().unwrap(),
+                                                            alias,
+                                                        );
                                                         // self.set_focus(Focus::Loading);
                                                     }
                                                 }
@@ -371,6 +384,21 @@ impl App {
             .and_modify(|v| v.query_alias = Some(self.inputs.get(Focus::Rename).to_owned()));
     }
 
+    fn rename_query(&mut self, query: String, alias: String) {
+        if let Entry::Vacant(e) = self.datasets.entry(query.to_owned()) {
+            e.insert(Dataset {
+                query_alias: Some(alias),
+                facets: BTreeMap::default(),
+                bounds: Bounds::default(),
+                selection: String::new(),
+            });
+        } else {
+            _ = self.datasets.entry(query.to_owned()).and_modify(|data| {
+                data.query_alias = Some(alias);
+            })
+        }
+    }
+
     fn add_query(&self, query: NRQLQuery) {
         self.backend.add_query(query);
     }
@@ -390,7 +418,7 @@ impl App {
 
         let (removed, _) = self.datasets.remove_entry(&to_delete).unwrap();
         // TODO: Fix deleted queries reappearing on new data!
-        _ = self.backend.ui_tx.send(removed);
+        _ = self.backend.ui_tx.send(UIEvent::DeleteQuery(removed));
     }
 
     pub fn next(&mut self) {
@@ -408,6 +436,7 @@ impl App {
             }
             None => 0,
         };
+
         self.list_state.select(Some(i));
         self.selected_query = self
             .datasets
@@ -442,22 +471,39 @@ impl App {
     }
 
     // TODO: Prompt user for session save on exit (q)
-    // pub fn save_session(&self) {
-    //     let output = self
-    //         .datasets
-    //         .iter()
-    //         .map(|(q, data)| {
-    //             (
-    //                 data.query_alias.clone().unwrap_or(q.to_owned()),
-    //                 q.to_owned(),
-    //             )
-    //         })
-    //         .collect::<BTreeMap<String, String>>();
+    pub fn save_session(&self) {
+        // TODO: Dedup code
+        let home_dir = match env::var("HOME") {
+            Ok(val) => val,
+            Err(_) => {
+                eprintln!("Unable to determine home directory.");
+                panic!()
+            }
+        };
 
-    //     let yaml: String =
-    //         serde_yaml::to_string(&output).expect("ERROR: Could not serialize queries!");
-    //     let mut file = File::open("").expect("ERROR: Could not open file!");
-    //     file.write_all(yaml.as_bytes())
-    //         .expect("ERROR: Could not write to file!");
-    // }
+        let output = self
+            .datasets
+            .iter()
+            .map(|(q, data)| {
+                (
+                    data.query_alias.clone().unwrap_or(q.to_owned()),
+                    q.to_owned(),
+                )
+            })
+            .collect::<BTreeMap<String, String>>();
+
+        let yaml: String =
+            serde_yaml::to_string(&output).expect("ERROR: Could not serialize queries!");
+        let mut session_path = PathBuf::from(home_dir);
+        session_path.push("Library/Application Support/xrelic/session.yaml");
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(session_path)
+            .expect("ERROR: Could not open file!");
+        file.write_all(yaml.as_bytes())
+            .expect("ERROR: Could not write to file!");
+    }
 }

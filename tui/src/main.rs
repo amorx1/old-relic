@@ -57,6 +57,13 @@ fn main() -> io::Result<()> {
     let session: Option<BTreeMap<String, String>> =
         serde_yaml::from_str(&yaml).expect("ERROR: Could not deserialize session file!");
 
+    // let x = session.clone().unwrap().into_iter();
+    // for (alias, query) in x {
+    //     println!("Alias: {} | Query: {}", alias, query);
+    //     let q = query.trim().to_nrql().unwrap();
+    //     println!("Parsed query: {}", q.to_string().unwrap());
+    // }
+
     let mut client = NewRelicClient::builder();
     client
         .url(ENDPOINT)

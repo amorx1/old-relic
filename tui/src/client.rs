@@ -66,8 +66,6 @@ impl NewRelicClient {
         &self,
         query_str: impl AsRef<str>,
     ) -> Option<Vec<T>> {
-        // dbg!(&query_str);
-
         let response = self
             .client
             .clone()?
@@ -93,7 +91,6 @@ impl NewRelicClient {
                 .map_err(|e| anyhow!(e))
                 .expect("ERROR: Error in response deserialization schema");
 
-            // dbg!(&json);
             return Some(json.data.actor.account.nrql.results);
         }
 

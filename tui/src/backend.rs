@@ -22,6 +22,15 @@ pub struct Bounds {
     pub maxes: (f64, f64),
 }
 
+impl Default for Bounds {
+    fn default() -> Self {
+        Bounds {
+            mins: (0 as f64, 0 as f64),
+            maxes: (0 as f64, 0 as f64),
+        }
+    }
+}
+
 pub struct Payload {
     pub query: String,
     pub facets: Vec<String>,
@@ -35,14 +44,18 @@ pub struct Backend {
     pub runtime: Runtime,
     pub data_tx: Sender<Payload>,
     pub data_rx: Receiver<Payload>,
-    pub ui_tx: MSender<String>,
-    pub ui_rx: MReceiver<String>,
+    pub ui_tx: MSender<UIEvent>,
+    pub ui_rx: MReceiver<UIEvent>,
+}
+
+pub enum UIEvent {
+    DeleteQuery(String),
 }
 
 impl Backend {
     pub fn new(client: NewRelicClient) -> Self {
         let (data_tx, data_rx) = channel::<Payload>();
-        let (ui_tx, ui_rx) = unbounded();
+        let (ui_tx, ui_rx) = unbounded::<UIEvent>();
         let runtime = runtime::Builder::new_multi_thread()
             .worker_threads(1)
             .thread_name("data")
@@ -74,12 +87,16 @@ pub async fn refresh_timeseries(
     query: NRQLQuery,
     client: NewRelicClient,
     data_tx: Sender<Payload>,
-    ui_rx: MReceiver<String>,
+    ui_rx: MReceiver<UIEvent>,
 ) -> Result<()> {
     loop {
-        while let Some(q) = ui_rx.try_iter().next() {
-            if query.to_string().unwrap() == q {
-                return Ok(());
+        while let Some(event) = ui_rx.try_iter().next() {
+            match event {
+                UIEvent::DeleteQuery(q) => {
+                    if query.to_string().unwrap() == q {
+                        return Ok(());
+                    }
+                }
             }
         }
 

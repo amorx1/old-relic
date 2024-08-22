@@ -27,6 +27,7 @@ impl NRQLQuery {
     pub fn to_string(&self) -> Result<String> {
         let mut query = String::new();
         query += format!("FROM {} ", self.from).as_str();
+        // TODO: Fix 'as value' duplication on save/load session
         query += format!("SELECT {} as value ", self.select).as_str();
         query += format!("WHERE {} ", self.r#where).as_str();
         if !String::is_empty(&self.facet) {
