@@ -12,10 +12,7 @@ use rand::{thread_rng, Rng};
 use ratatui::{
     backend::Backend,
     layout::{Constraint, Layout},
-    style::{
-        palette::tailwind::{self, Palette},
-        Color,
-    },
+    style::{palette::tailwind::Palette, Color},
     widgets::ListState,
     Frame, Terminal,
 };
@@ -79,6 +76,28 @@ pub struct Inputs {
 }
 
 impl Inputs {
+    pub fn new() -> Self {
+        Inputs {
+            _inputs: [
+                Input {
+                    buffer: String::new(),
+                    cursor_position: 0,
+                },
+                Input {
+                    buffer: String::new(),
+                    cursor_position: 0,
+                },
+                Input {
+                    buffer: String::new(),
+                    cursor_position: 0,
+                },
+                Input {
+                    buffer: String::new(),
+                    cursor_position: 0,
+                },
+            ],
+        }
+    }
     pub fn get(&self, focus: Focus) -> &str {
         &self._inputs[focus as usize].buffer
     }
@@ -155,26 +174,7 @@ impl App {
         session: Option<BTreeMap<String, String>>,
     ) -> Self {
         Self {
-            inputs: Inputs {
-                _inputs: [
-                    Input {
-                        buffer: String::new(),
-                        cursor_position: 0,
-                    },
-                    Input {
-                        buffer: String::new(),
-                        cursor_position: 0,
-                    },
-                    Input {
-                        buffer: String::new(),
-                        cursor_position: 0,
-                    },
-                    Input {
-                        buffer: String::new(),
-                        cursor_position: 0,
-                    },
-                ],
-            },
+            inputs: Inputs::new(),
             session,
             theme: Theme {
                 focus_fg: palette.c500,
@@ -195,12 +195,13 @@ impl App {
         loop {
             terminal.draw(|f| self.ui(f))?;
 
+            // Session Load
             if self.session.is_some() {
                 self.focus = Focus::SessionLoad;
                 self.input_mode = InputMode::Input;
             }
 
-            // Manual event handlers.
+            // Event handlers
             if let Ok(true) = event::poll(Duration::from_millis(50)) {
                 if let Event::Key(key) = event::read()? {
                     match self.input_mode {
@@ -211,7 +212,7 @@ impl App {
                             }
                             KeyCode::Char('e') => {
                                 self.set_focus(Focus::QueryInput);
-                                self.input_mode = InputMode::Input;
+                                self.set_input_mode(InputMode::Input);
                             }
                             KeyCode::Char('j') => self.next(),
                             KeyCode::Char('k') => self.previous(),
@@ -221,7 +222,7 @@ impl App {
                                 _ => {
                                     if !self.datasets.is_empty() {
                                         self.set_focus(Focus::Rename);
-                                        self.input_mode = InputMode::Input;
+                                        self.set_input_mode(InputMode::Input);
                                     }
                                 }
                             },
@@ -280,7 +281,7 @@ impl App {
                                 self.inputs.clear(self.focus);
                                 self.inputs.reset_cursor(self.focus);
                                 self.set_focus(Focus::Default);
-                                self.input_mode = InputMode::Normal;
+                                self.set_input_mode(InputMode::Normal);
                             }
                             KeyCode::Char(to_insert) => {
                                 self.inputs.enter_char(self.focus, to_insert);
@@ -296,7 +297,7 @@ impl App {
                             }
                             KeyCode::Esc => {
                                 self.set_focus(Focus::Default);
-                                self.input_mode = InputMode::Normal;
+                                self.set_input_mode(InputMode::Normal);
                             }
                             _ => {}
                         },
@@ -338,35 +339,30 @@ impl App {
     }
 
     pub fn ui(&mut self, frame: &mut Frame) {
-        if self.focus == Focus::Loading {
-            render_loading(self, frame, frame.size());
-        }
-        if self.focus == Focus::SessionLoad {
-            render_load_session(self, frame, frame.size());
-            return;
-        }
-        if self.focus == Focus::Dashboard {
-            render_dashboard(self, frame, frame.size());
-            return;
-        }
         let area = frame.size();
-        // TODO: Possible to pre-compute?
         let horizontal = Layout::horizontal([Constraint::Percentage(15), Constraint::Min(20)]);
         let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(20)]);
         let [input_area, rest] = vertical.areas(area);
         let [list_area, graph_area] = horizontal.areas(rest);
 
-        render_query_box(self, frame, input_area);
-        render_query_list(self, frame, list_area);
         match self.focus {
-            Focus::Default | Focus::QueryInput => {
-                render_graph(self, frame, graph_area);
+            Focus::Loading => todo!(),
+            Focus::SessionLoad => {
+                render_load_session(self, frame, area);
+            }
+            Focus::Dashboard => {
+                render_dashboard(self, frame, area);
             }
             Focus::Rename => {
+                render_query_box(self, frame, input_area);
+                render_query_list(self, frame, list_area);
                 render_rename_dialog(self, frame, graph_area);
             }
-            // Should never be reached
-            _ => panic!(),
+            Focus::Default | Focus::QueryInput => {
+                render_query_box(self, frame, input_area);
+                render_query_list(self, frame, list_area);
+                render_graph(self, frame, graph_area);
+            }
         }
     }
 
@@ -397,6 +393,10 @@ impl App {
 
     pub fn set_focus(&mut self, focus: Focus) {
         self.focus = focus
+    }
+
+    pub fn set_input_mode(&mut self, mode: InputMode) {
+        self.input_mode = mode;
     }
 
     pub fn delete_query(&mut self) {
