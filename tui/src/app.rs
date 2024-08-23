@@ -59,10 +59,6 @@ pub struct Dataset {
 pub struct Theme {
     pub focus_fg: Color,
     pub chart_fg: Color,
-    pub elastic_fg: Color,
-    pub net_fg: Color,
-    pub webex_fg: Color,
-    pub value_fg: Color,
 }
 
 pub struct App {
@@ -183,10 +179,6 @@ impl App {
             theme: Theme {
                 focus_fg: palette.c500,
                 chart_fg: palette.c900,
-                elastic_fg: palette.c400,
-                net_fg: palette.c400,
-                webex_fg: tailwind::AMBER.c400,
-                value_fg: palette.c400,
             },
             input_mode: InputMode::Normal,
             focus: Focus::Default,
