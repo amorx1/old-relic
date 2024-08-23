@@ -243,7 +243,10 @@ impl App {
                                         }
                                     }
                                     Focus::Rename => {
-                                        self.rename_current_query();
+                                        self.rename_query(
+                                            self.selected_query.to_owned(),
+                                            self.inputs.get(Focus::Rename).to_owned(),
+                                        );
                                     }
                                     Focus::SessionLoad => {
                                         match self.inputs.get(Focus::SessionLoad) {
@@ -364,12 +367,6 @@ impl App {
                 render_graph(self, frame, graph_area);
             }
         }
-    }
-
-    fn rename_current_query(&mut self) {
-        self.datasets
-            .entry(self.selected_query.to_owned())
-            .and_modify(|v| v.query_alias = Some(self.inputs.get(Focus::Rename).to_owned()));
     }
 
     fn rename_query(&mut self, query: String, alias: String) {
