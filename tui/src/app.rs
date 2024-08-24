@@ -3,7 +3,7 @@ use crate::{
     query::{NRQLQuery, NRQL},
     ui::{
         render_dashboard, render_graph, render_load_session, render_loading, render_query_box,
-        render_query_list, render_rename_dialog,
+        render_query_list, render_rename_dialog, render_splash,
     },
 };
 
@@ -32,7 +32,6 @@ pub enum Focus {
     Rename = 1,
     Dashboard = 4,
     SessionLoad = 2,
-    Loading = 5,
     Default = 3,
 }
 
@@ -47,6 +46,7 @@ pub struct Input {
 }
 
 pub struct Dataset {
+    pub has_data: bool,
     pub query_alias: Option<String>,
     pub facets: BTreeMap<String, Vec<(f64, f64)>>,
     pub bounds: Bounds,
@@ -58,6 +58,61 @@ pub struct Theme {
     pub chart_fg: Color,
 }
 
+pub struct Datasets {
+    datasets: BTreeMap<String, Dataset>,
+    selected: String,
+}
+
+impl Datasets {
+    pub fn new() -> Self {
+        Datasets {
+            datasets: BTreeMap::new(),
+            selected: String::new(),
+        }
+    }
+
+    pub fn entry(&mut self, entry: String) -> Entry<'_, String, Dataset> {
+        self.datasets.entry(entry)
+    }
+
+    pub fn selected(&self) -> Option<&Dataset> {
+        self.datasets.get(&self.selected)
+    }
+
+    pub fn remove_entry(&mut self, i: usize) -> String {
+        let to_delete = self
+            .datasets
+            .keys()
+            .nth(i)
+            .cloned()
+            .expect("ERROR: Could not index query for deletion!");
+
+        let (removed, _) = self.datasets.remove_entry(&to_delete).unwrap();
+        removed
+    }
+
+    pub fn iter(&self) -> std::collections::btree_map::Iter<'_, String, Dataset> {
+        self.datasets.iter()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.datasets.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.datasets.len()
+    }
+
+    pub fn select(&mut self, i: usize) {
+        self.selected = self
+            .datasets
+            .keys()
+            .nth(i)
+            .expect("ERROR: Could not select query!")
+            .to_owned();
+    }
+}
+
 pub struct App {
     pub session: Option<BTreeMap<String, String>>,
     pub theme: Theme,
@@ -65,9 +120,8 @@ pub struct App {
     pub input_mode: InputMode,
     pub focus: Focus,
     pub backend: AppBackend,
-    pub selected_query: String,
     pub list_state: ListState,
-    pub datasets: BTreeMap<String, Dataset>,
+    pub datasets: Datasets,
     pub facet_colours: BTreeMap<String, Color>,
 }
 
@@ -183,9 +237,8 @@ impl App {
             input_mode: InputMode::Normal,
             focus: Focus::Default,
             backend,
-            selected_query: String::new(),
             list_state: ListState::default(),
-            datasets: BTreeMap::default(),
+            datasets: Datasets::new(),
             facet_colours: BTreeMap::default(),
         }
     }
@@ -244,7 +297,7 @@ impl App {
                                     }
                                     Focus::Rename => {
                                         self.rename_query(
-                                            self.selected_query.to_owned(),
+                                            self.datasets.selected.to_owned(),
                                             self.inputs.get(Focus::Rename).to_owned(),
                                         );
                                     }
@@ -316,6 +369,7 @@ impl App {
                         facets: payload.data,
                         bounds: payload.bounds,
                         selection: payload.selection,
+                        has_data: true,
                     });
                 } else {
                     _ = self
@@ -324,6 +378,7 @@ impl App {
                         .and_modify(|data| {
                             data.facets = payload.data;
                             data.bounds = payload.bounds;
+                            data.has_data = true
                         })
                 }
 
@@ -342,14 +397,13 @@ impl App {
     }
 
     pub fn ui(&mut self, frame: &mut Frame) {
-        let area = frame.size();
+        let area = frame.area();
         let horizontal = Layout::horizontal([Constraint::Percentage(15), Constraint::Min(20)]);
         let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(20)]);
         let [input_area, rest] = vertical.areas(area);
         let [list_area, graph_area] = horizontal.areas(rest);
 
         match self.focus {
-            Focus::Loading => todo!(),
             Focus::SessionLoad => {
                 render_load_session(self, frame, area);
             }
@@ -364,7 +418,15 @@ impl App {
             Focus::Default | Focus::QueryInput => {
                 render_query_box(self, frame, input_area);
                 render_query_list(self, frame, list_area);
-                render_graph(self, frame, graph_area);
+                if let Some(dataset) = self.datasets.selected() {
+                    if dataset.has_data {
+                        render_graph(self, frame, graph_area);
+                    } else {
+                        render_loading(self, frame, graph_area);
+                    }
+                } else {
+                    render_splash(self, frame, graph_area);
+                }
             }
         }
     }
@@ -372,6 +434,7 @@ impl App {
     fn rename_query(&mut self, query: String, alias: String) {
         if let Entry::Vacant(e) = self.datasets.entry(query.to_owned()) {
             e.insert(Dataset {
+                has_data: false,
                 query_alias: Some(alias),
                 facets: BTreeMap::default(),
                 bounds: Bounds::default(),
@@ -398,14 +461,8 @@ impl App {
 
     pub fn delete_query(&mut self) {
         let i = self.list_state.selected().unwrap();
-        let to_delete = self
-            .datasets
-            .keys()
-            .nth(i)
-            .cloned()
-            .expect("ERROR: Could not index query for deletion!");
 
-        let (removed, _) = self.datasets.remove_entry(&to_delete).unwrap();
+        let removed = self.datasets.remove_entry(i);
         // TODO: Fix deleted queries reappearing on new data!
         _ = self.backend.ui_tx.send(UIEvent::DeleteQuery(removed));
     }
@@ -427,12 +484,7 @@ impl App {
         };
 
         self.list_state.select(Some(i));
-        self.selected_query = self
-            .datasets
-            .keys()
-            .nth(i)
-            .expect("ERROR: Could not select query!")
-            .to_owned();
+        self.datasets.select(i);
     }
 
     pub fn previous(&mut self) {
@@ -451,12 +503,7 @@ impl App {
             None => 0,
         };
         self.list_state.select(Some(i));
-        self.selected_query = self
-            .datasets
-            .keys()
-            .nth(i)
-            .expect("ERROR: Could not select query!")
-            .to_owned();
+        self.datasets.select(i);
     }
 
     // TODO: Prompt user for session save on exit (q)

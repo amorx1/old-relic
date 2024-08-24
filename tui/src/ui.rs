@@ -2,12 +2,14 @@ use chrono::{DateTime, Utc};
 
 use ratatui::{
     prelude::*,
+    symbols::Marker,
     widgets::{
         Axis, Block, BorderType, Borders, Chart, Clear, Dataset, GraphType, LegendPosition, List,
         Padding, Paragraph,
     },
 };
 use style::palette::tailwind;
+use throbber_widgets_tui::WhichUse;
 use tui_big_text::{BigText, PixelSize};
 
 use crate::{
@@ -27,7 +29,26 @@ pub const PALETTES: [tailwind::Palette; 9] = [
     tailwind::SKY,
 ];
 
-pub fn render_loading(app: &mut App, frame: &mut Frame, area: Rect) {}
+pub fn render_splash(_app: &mut App, frame: &mut Frame, area: Rect) {
+    let dummy = BigText::builder()
+        .pixel_size(PixelSize::Full)
+        .style(Style::new().blue())
+        .lines(vec!["XRELIC".light_green().into()])
+        .build();
+
+    let center = centered_rect(30, 30, area);
+    frame.render_widget(dummy, center);
+}
+
+pub fn render_loading(_app: &mut App, frame: &mut Frame, area: Rect) {
+    let center = centered_rect(5, 5, area);
+    let throbber = throbber_widgets_tui::Throbber::default()
+        .label("Loading data...")
+        .style(Style::default().fg(Color::LightGreen))
+        .throbber_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+        .use_type(WhichUse::Spin);
+    frame.render_widget(throbber, center);
+}
 
 pub fn render_load_session(app: &mut App, frame: &mut Frame, area: Rect) {
     let area = centered_rect(60, 20, area);
@@ -43,7 +64,7 @@ pub fn render_load_session(app: &mut App, frame: &mut Frame, area: Rect) {
         })
         .block(
             Block::default()
-                .padding(Padding::zero())
+                .padding(Padding::ZERO)
                 .borders(Borders::BOTTOM)
                 .border_type(BorderType::Rounded),
         );
@@ -163,8 +184,7 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
                 .pixel_size(PixelSize::Full)
                 .style(Style::new().blue())
                 .lines(vec!["XRELIC".light_green().into()])
-                .build()
-                .unwrap();
+                .build();
 
             let center = centered_rect(30, 30, area);
             frame.render_widget(dummy, center);
@@ -185,7 +205,7 @@ pub fn render_rename_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
         })
         .block(
             Block::default()
-                .padding(Padding::zero())
+                .padding(Padding::ZERO)
                 .borders(Borders::BOTTOM),
         );
 
@@ -237,7 +257,7 @@ pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
-    let datasets = app.datasets.get(&app.selected_query).map(|data| {
+    let datasets = app.datasets.selected().map(|data| {
         data.facets
             .iter()
             .map(|(facet, points)| {
@@ -251,83 +271,71 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
             .collect::<Vec<_>>()
     });
 
-    match datasets {
-        Some(datasets) => {
-            let dataset = app
-                .datasets
-                .get(&app.selected_query)
-                .expect("ERROR: No bounds found for selected query");
-            let bounds = dataset.bounds;
-            let selection = &dataset.selection;
+    if let Some(datasets) = datasets {
+        let dataset = app
+            .datasets
+            .selected()
+            .expect("ERROR: No bounds found for selected query");
 
-            let (min_x, mut min_y) = bounds.mins;
-            let (_, mut max_y) = bounds.maxes;
-            let mut half_y = (max_y - min_y) / 2_f64;
+        let bounds = dataset.bounds;
+        let selection = &dataset.selection;
 
-            min_y = f64::round(min_y);
-            max_y = f64::round(max_y);
-            half_y = f64::round(half_y);
+        let (min_x, mut min_y) = bounds.mins;
+        let (_, mut max_y) = bounds.maxes;
+        let mut half_y = (max_y - min_y) / 2_f64;
 
-            // Create the X axis and define its properties
-            let x_axis = Axis::default()
-                .title("Time".fg(app.theme.chart_fg))
-                .style(Style::default().fg(app.theme.chart_fg))
-                .bounds([min_x, Utc::now().timestamp() as f64])
-                .labels(vec![
-                    DateTime::from_timestamp(min_x as i64, 0)
-                        .unwrap()
-                        .time()
-                        .to_string()
-                        .fg(app.theme.chart_fg)
-                        .bold(),
-                    DateTime::from_timestamp(Utc::now().timestamp(), 0)
-                        .unwrap()
-                        .to_string()
-                        .fg(app.theme.chart_fg)
-                        .bold(),
-                ]);
+        min_y = f64::round(min_y);
+        max_y = f64::round(max_y);
+        half_y = f64::round(half_y);
 
-            // Create the Y axis and define its properties
-            let y_axis = Axis::default()
-                .title(selection.clone().fg(app.theme.chart_fg))
-                .style(Style::default().fg(app.theme.chart_fg))
-                .bounds([min_y, max_y])
-                .labels(vec![
-                    min_y.to_string().fg(app.theme.chart_fg).bold(),
-                    half_y.to_string().fg(app.theme.chart_fg).bold(),
-                    max_y.to_string().fg(app.theme.chart_fg).bold(),
-                ]);
+        // Create the X axis and define its properties
+        let x_axis = Axis::default()
+            .title("Time".fg(app.theme.chart_fg))
+            .style(Style::default().fg(app.theme.chart_fg))
+            .bounds([min_x, Utc::now().timestamp() as f64])
+            .labels(vec![
+                DateTime::from_timestamp(min_x as i64, 0)
+                    .unwrap()
+                    .time()
+                    .to_string()
+                    .fg(app.theme.chart_fg)
+                    .bold(),
+                DateTime::from_timestamp(Utc::now().timestamp(), 0)
+                    .unwrap()
+                    .to_string()
+                    .fg(app.theme.chart_fg)
+                    .bold(),
+            ]);
 
-            let legend_position = match &datasets.len() {
-                1 => None,
-                _ => Some(LegendPosition::TopRight),
-            };
+        // Create the Y axis and define its properties
+        let y_axis = Axis::default()
+            .title(selection.clone().fg(app.theme.chart_fg))
+            .style(Style::default().fg(app.theme.chart_fg))
+            .bounds([min_y, max_y])
+            .labels(vec![
+                min_y.to_string().fg(app.theme.chart_fg).bold(),
+                half_y.to_string().fg(app.theme.chart_fg).bold(),
+                max_y.to_string().fg(app.theme.chart_fg).bold(),
+            ]);
 
-            // Create the chart and link all the parts together
-            let chart = Chart::new(datasets)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_style(Style::default().fg(app.theme.chart_fg))
-                        .border_type(BorderType::Thick)
-                        .border_type(BorderType::Rounded),
-                )
-                .legend_position(legend_position)
-                .x_axis(x_axis)
-                .y_axis(y_axis);
-            frame.render_widget(chart, area);
-        }
-        None => {
-            let dummy = BigText::builder()
-                .pixel_size(PixelSize::Full)
-                .style(Style::new().blue())
-                .lines(vec!["XRELIC".light_green().into()])
-                .build()
-                .unwrap();
+        let legend_position = match &datasets.len() {
+            1 => None,
+            _ => Some(LegendPosition::TopRight),
+        };
 
-            let center = centered_rect(30, 30, area);
-            frame.render_widget(dummy, center);
-        }
+        // Create the chart and link all the parts together
+        let chart = Chart::new(datasets)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(app.theme.chart_fg))
+                    .border_type(BorderType::Thick)
+                    .border_type(BorderType::Rounded),
+            )
+            .legend_position(legend_position)
+            .x_axis(x_axis)
+            .y_axis(y_axis);
+        frame.render_widget(chart, area);
     }
     // frame.render_widget(chart, frame.size());
 }
