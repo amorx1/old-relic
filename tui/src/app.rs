@@ -18,8 +18,7 @@ use ratatui::{
 };
 use std::{
     collections::{btree_map::Entry, BTreeMap},
-    env,
-    fs::OpenOptions,
+    fs::{self, OpenOptions},
     io::Write,
     path::PathBuf,
     time::Duration,
@@ -114,8 +113,14 @@ impl Datasets {
     }
 }
 
+pub struct Session {
+    pub is_loaded: bool,
+    pub queries: Option<BTreeMap<String, String>>,
+    pub session_path: Box<PathBuf>,
+}
+
 pub struct App {
-    pub session: Option<BTreeMap<String, String>>,
+    pub session: Session,
     pub theme: Theme,
     pub inputs: Inputs,
     pub input_mode: InputMode,
@@ -231,11 +236,7 @@ impl Inputs {
 }
 
 impl App {
-    pub fn new(
-        palette: &Palette,
-        backend: AppBackend,
-        session: Option<BTreeMap<String, String>>,
-    ) -> Self {
+    pub fn new(palette: &Palette, backend: AppBackend, session: Session) -> Self {
         Self {
             inputs: Inputs::new(),
             session,
@@ -258,7 +259,7 @@ impl App {
             terminal.draw(|f| self.ui(f))?;
 
             // Session Load
-            if self.session.is_some() {
+            if !self.session.is_loaded {
                 self.focus = Focus::SessionLoad;
                 self.set_input_mode(InputMode::Input);
             }
@@ -314,28 +315,11 @@ impl App {
                                         match self.inputs.get(Focus::SessionLoad) {
                                             // Load session
                                             "y" | "Y" => {
-                                                let session =
-                                                    self.session.clone().unwrap().into_iter();
-                                                for (alias, query) in session {
-                                                    // TODO: Avoid
-                                                    let clean_query = query.replace("as value", "");
-                                                    if let Ok(parsed_query) =
-                                                        clean_query.trim().to_nrql()
-                                                    {
-                                                        self.add_query(parsed_query.clone());
-                                                        self.rename_query(
-                                                            parsed_query.to_string().unwrap(),
-                                                            alias,
-                                                        );
-                                                    }
-                                                }
+                                                self.load_session();
                                             }
                                             // Don't load session
                                             _ => {}
                                         }
-                                        // Clear previous session once loaded
-                                        self.session = None;
-
                                         // Update focus to home
                                         self.set_focus(Focus::Default);
                                     }
@@ -520,17 +504,27 @@ impl App {
         self.datasets.select(i);
     }
 
-    // TODO: Prompt user for session save on exit (q)
-    pub fn save_session(&self) {
-        // TODO: Dedup code
-        let home_dir = match env::var("HOME") {
-            Ok(val) => val,
-            Err(_) => {
-                eprintln!("Unable to determine home directory.");
-                panic!()
-            }
-        };
+    pub fn load_session(&mut self) {
+        let session_path = self.session.session_path.clone();
+        let yaml = fs::read_to_string(*session_path).expect("ERROR: Could not read session file!");
+        let session_queries: Option<BTreeMap<String, String>> =
+            serde_yaml::from_str(&yaml).expect("ERROR: Could not deserialize session file!");
 
+        if let Some(queries) = session_queries {
+            let iter = queries.into_iter();
+            for (alias, query) in iter {
+                let clean_query = query.replace("as value", "");
+                if let Ok(parsed_query) = clean_query.trim().to_nrql() {
+                    self.add_query(parsed_query.clone());
+                    self.rename_query(parsed_query.to_string().unwrap(), alias);
+                }
+            }
+        }
+
+        self.session.is_loaded = true;
+    }
+
+    pub fn save_session(&self) {
         let output = self
             .datasets
             .iter()
@@ -544,14 +538,13 @@ impl App {
 
         let yaml: String =
             serde_yaml::to_string(&output).expect("ERROR: Could not serialize queries!");
-        let mut session_path = PathBuf::from(home_dir);
-        session_path.push("Library/Application Support/xrelic/session.yaml");
+        let session_path = self.session.session_path.clone();
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
             .truncate(true)
             .create(true)
-            .open(session_path)
+            .open(*session_path)
             .expect("ERROR: Could not open file!");
         file.write_all(yaml.as_bytes())
             .expect("ERROR: Could not write to file!");

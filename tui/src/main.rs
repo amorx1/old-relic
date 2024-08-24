@@ -5,7 +5,7 @@ pub mod parser;
 pub mod query;
 mod ui;
 
-use app::App;
+use app::{App, Session};
 use backend::Backend;
 use client::NewRelicClient;
 use crossterm::{
@@ -17,8 +17,7 @@ use reqwest::Client;
 use ui::PALETTES;
 
 use std::{
-    collections::BTreeMap,
-    env, fs,
+    env,
     io::{self, stdout},
     path::PathBuf,
     sync::OnceLock,
@@ -52,10 +51,13 @@ fn main() -> io::Result<()> {
 
     // Construct the path to Application Support directory
     let mut session_path = PathBuf::from(home_dir);
+    // TODO: Implement for non-MacOS
     session_path.push("Library/Application Support/xrelic/session.yaml");
-    let yaml = fs::read_to_string(session_path).expect("ERROR: Could not read session file!");
-    let session: Option<BTreeMap<String, String>> =
-        serde_yaml::from_str(&yaml).expect("ERROR: Could not deserialize session file!");
+    let session = Session {
+        queries: None,
+        session_path: Box::new(session_path),
+        is_loaded: false,
+    };
 
     let mut client = NewRelicClient::builder();
     client
