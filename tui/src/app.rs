@@ -15,7 +15,7 @@ use ratatui::{
     backend::Backend,
     layout::{Constraint, Layout},
     style::{palette::tailwind::Palette, Color},
-    widgets::ListState,
+    widgets::{ListState, Tabs},
     Frame, Terminal,
 };
 use std::{
@@ -53,12 +53,19 @@ pub struct Session {
     pub session_path: Box<PathBuf>,
 }
 
+#[derive(Clone)]
+pub enum Tab {
+    Graph = 0,
+    Logs = 1,
+}
+
 pub struct App {
     pub session: Session,
     pub theme: Theme,
     pub inputs: Inputs,
     pub input_mode: InputMode,
     pub focus: Focus,
+    pub tab: Tab,
     pub backend: AppBackend,
     pub list_state: ListState,
     pub datasets: Datasets,
@@ -75,6 +82,7 @@ impl App {
                 chart_fg: palette.c900,
             },
             input_mode: InputMode::Normal,
+            tab: Tab::Graph,
             focus: Focus::Default,
             backend,
             list_state: ListState::default(),
@@ -123,6 +131,8 @@ impl App {
                                 Focus::Dashboard => self.set_focus(Focus::Default),
                                 _ => self.set_focus(Focus::Dashboard),
                             },
+                            KeyCode::Char('h') => self.previous_tab(),
+                            KeyCode::Char('l') => self.next_tab(),
                             _ => (),
                         },
                         InputMode::Input if key.kind == KeyEventKind::Press => match key.code {
@@ -229,33 +239,50 @@ impl App {
 
     pub fn ui(&mut self, frame: &mut Frame) {
         let area = frame.area();
-        let horizontal = Layout::horizontal([Constraint::Percentage(15), Constraint::Min(20)]);
-        let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(20)]);
-        let [input_area, rest] = vertical.areas(area);
-        let [list_area, graph_area] = horizontal.areas(rest);
+        let vertical = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]);
+        let [header_area, area] = vertical.areas(area);
 
-        match self.focus {
-            Focus::SessionSave => render_save_session(self, frame, area),
-            Focus::SessionLoad => render_load_session(self, frame, area),
-            Focus::Dashboard => render_dashboard(self, frame, area),
-            Focus::Rename => {
-                render_query_box(self, frame, input_area);
-                render_query_list(self, frame, list_area);
-                render_rename_dialog(self, frame, graph_area);
-            }
-            Focus::Default | Focus::QueryInput => {
-                render_query_box(self, frame, input_area);
-                render_query_list(self, frame, list_area);
-                if let Some(dataset) = self.datasets.selected() {
-                    if dataset.has_data {
-                        render_graph(self, frame, graph_area);
-                    } else {
-                        render_loading(self, frame, graph_area);
+        let titles = vec!["Graph", "Logs"].into_iter();
+        let tabs = Tabs::new(titles)
+            .select(self.tab.clone() as usize)
+            .padding("", "")
+            .divider(" ");
+
+        frame.render_widget(tabs, header_area);
+
+        match self.tab {
+            Tab::Graph => {
+                let horizontal =
+                    Layout::horizontal([Constraint::Percentage(15), Constraint::Min(20)]);
+                let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(20)]);
+                let [input_area, rest] = vertical.areas(area);
+                let [list_area, graph_area] = horizontal.areas(rest);
+
+                match self.focus {
+                    Focus::SessionSave => render_save_session(self, frame, area),
+                    Focus::SessionLoad => render_load_session(self, frame, area),
+                    Focus::Dashboard => render_dashboard(self, frame, area),
+                    Focus::Rename => {
+                        render_query_box(self, frame, input_area);
+                        render_query_list(self, frame, list_area);
+                        render_rename_dialog(self, frame, graph_area);
                     }
-                } else {
-                    render_splash(self, frame, graph_area);
+                    Focus::Default | Focus::QueryInput => {
+                        render_query_box(self, frame, input_area);
+                        render_query_list(self, frame, list_area);
+                        if let Some(dataset) = self.datasets.selected() {
+                            if dataset.has_data {
+                                render_graph(self, frame, graph_area);
+                            } else {
+                                render_loading(self, frame, graph_area);
+                            }
+                        } else {
+                            render_splash(self, frame, graph_area);
+                        }
+                    }
                 }
             }
+            Tab::Logs => todo!(),
         }
     }
 
@@ -378,5 +405,20 @@ impl App {
             .expect("ERROR: Could not open file!");
         file.write_all(yaml.as_bytes())
             .expect("ERROR: Could not write to file!");
+    }
+
+    fn previous_tab(&mut self) {
+        match self.tab {
+            Tab::Graph => self.tab = Tab::Logs,
+            Tab::Logs => self.tab = Tab::Graph,
+        }
+    }
+
+    fn next_tab(&mut self) {
+        // TODO: Handle n tabs
+        match self.tab {
+            Tab::Graph => self.tab = Tab::Logs,
+            Tab::Logs => self.tab = Tab::Graph,
+        }
     }
 }
