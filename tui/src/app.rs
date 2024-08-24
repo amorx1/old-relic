@@ -3,7 +3,7 @@ use crate::{
     query::{NRQLQuery, NRQL},
     ui::{
         render_dashboard, render_graph, render_load_session, render_loading, render_query_box,
-        render_query_list, render_rename_dialog, render_splash,
+        render_query_list, render_rename_dialog, render_save_session, render_splash,
     },
 };
 
@@ -32,6 +32,7 @@ pub enum Focus {
     Rename = 1,
     Dashboard = 4,
     SessionLoad = 2,
+    SessionSave = 5,
     Default = 3,
 }
 
@@ -126,13 +127,21 @@ pub struct App {
 }
 
 pub struct Inputs {
-    _inputs: [Input; 4],
+    _inputs: [Input; 6],
 }
 
 impl Inputs {
     pub fn new() -> Self {
         Inputs {
             _inputs: [
+                Input {
+                    buffer: String::new(),
+                    cursor_position: 0,
+                },
+                Input {
+                    buffer: String::new(),
+                    cursor_position: 0,
+                },
                 Input {
                     buffer: String::new(),
                     cursor_position: 0,
@@ -251,7 +260,7 @@ impl App {
             // Session Load
             if self.session.is_some() {
                 self.focus = Focus::SessionLoad;
-                self.input_mode = InputMode::Input;
+                self.set_input_mode(InputMode::Input);
             }
 
             // Event handlers
@@ -260,8 +269,8 @@ impl App {
                     match self.input_mode {
                         InputMode::Normal if key.kind == KeyEventKind::Press => match key.code {
                             KeyCode::Char('q') => {
-                                self.save_session();
-                                return Ok(());
+                                self.set_focus(Focus::SessionSave);
+                                self.set_input_mode(InputMode::Input);
                             }
                             KeyCode::Char('e') => {
                                 self.set_focus(Focus::QueryInput);
@@ -318,10 +327,8 @@ impl App {
                                                             parsed_query.to_string().unwrap(),
                                                             alias,
                                                         );
-                                                        // self.set_focus(Focus::Loading);
                                                     }
                                                 }
-                                                // };
                                             }
                                             // Don't load session
                                             _ => {}
@@ -331,6 +338,16 @@ impl App {
 
                                         // Update focus to home
                                         self.set_focus(Focus::Default);
+                                    }
+                                    Focus::SessionSave => {
+                                        match self.inputs.get(Focus::SessionSave) {
+                                            // Load session
+                                            "y" | "Y" => {
+                                                self.save_session();
+                                            }
+                                            _ => {}
+                                        }
+                                        return Ok(());
                                     }
                                     _ => {}
                                 };
@@ -404,12 +421,9 @@ impl App {
         let [list_area, graph_area] = horizontal.areas(rest);
 
         match self.focus {
-            Focus::SessionLoad => {
-                render_load_session(self, frame, area);
-            }
-            Focus::Dashboard => {
-                render_dashboard(self, frame, area);
-            }
+            Focus::SessionSave => render_save_session(self, frame, area),
+            Focus::SessionLoad => render_load_session(self, frame, area),
+            Focus::Dashboard => render_dashboard(self, frame, area),
             Focus::Rename => {
                 render_query_box(self, frame, input_area);
                 render_query_list(self, frame, list_area);

@@ -73,6 +73,28 @@ pub fn render_load_session(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(input, input_area);
 }
 
+pub fn render_save_session(app: &mut App, frame: &mut Frame, area: Rect) {
+    let area = centered_rect(60, 20, area);
+    let vertical = Layout::vertical([Constraint::Length(3), Constraint::Length(3)]);
+    let [prompt_area, input_area] = vertical.areas(area);
+
+    let prompt = Text::from("Save session? y/n");
+    let input = Paragraph::new(app.inputs.get(Focus::SessionSave))
+        .style(match app.input_mode {
+            InputMode::Normal => Style::default(),
+            InputMode::Input => Style::default().fg(app.theme.focus_fg),
+        })
+        .block(
+            Block::default()
+                .padding(Padding::ZERO)
+                .borders(Borders::BOTTOM)
+                .border_type(BorderType::Rounded),
+        );
+    frame.render_widget(Clear, area);
+    frame.render_widget(prompt, prompt_area);
+    frame.render_widget(input, input_area);
+}
+
 pub fn render_dashboard(app: &mut App, frame: &mut Frame, area: Rect) {
     let n_graphs = &app.datasets.len();
     let areas = match n_graphs {
