@@ -1,6 +1,8 @@
 mod app;
 mod backend;
 mod client;
+mod dataset;
+mod input;
 pub mod parser;
 pub mod query;
 mod ui;

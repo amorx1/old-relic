@@ -1,5 +1,7 @@
 use crate::{
     backend::{Backend as AppBackend, Bounds, UIEvent},
+    dataset::{Dataset, Datasets},
+    input::Inputs,
     query::{NRQLQuery, NRQL},
     ui::{
         render_dashboard, render_graph, render_load_session, render_loading, render_query_box,
@@ -40,77 +42,9 @@ pub enum InputMode {
     Input,
 }
 
-pub struct Input {
-    pub buffer: String,
-    pub cursor_position: usize,
-}
-
-pub struct Dataset {
-    pub has_data: bool,
-    pub query_alias: Option<String>,
-    pub facets: BTreeMap<String, Vec<(f64, f64)>>,
-    pub bounds: Bounds,
-    pub selection: String,
-}
-
 pub struct Theme {
     pub focus_fg: Color,
     pub chart_fg: Color,
-}
-
-pub struct Datasets {
-    datasets: BTreeMap<String, Dataset>,
-    selected: String,
-}
-
-impl Datasets {
-    pub fn new() -> Self {
-        Datasets {
-            datasets: BTreeMap::new(),
-            selected: String::new(),
-        }
-    }
-
-    pub fn entry(&mut self, entry: String) -> Entry<'_, String, Dataset> {
-        self.datasets.entry(entry)
-    }
-
-    pub fn selected(&self) -> Option<&Dataset> {
-        self.datasets.get(&self.selected)
-    }
-
-    pub fn remove_entry(&mut self, i: usize) -> String {
-        let to_delete = self
-            .datasets
-            .keys()
-            .nth(i)
-            .cloned()
-            .expect("ERROR: Could not index query for deletion!");
-
-        let (removed, _) = self.datasets.remove_entry(&to_delete).unwrap();
-        removed
-    }
-
-    pub fn iter(&self) -> std::collections::btree_map::Iter<'_, String, Dataset> {
-        self.datasets.iter()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.datasets.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.datasets.len()
-    }
-
-    pub fn select(&mut self, i: usize) {
-        self.selected = self
-            .datasets
-            .keys()
-            .nth(i)
-            .expect("ERROR: Could not select query!")
-            .to_owned();
-    }
 }
 
 pub struct Session {
@@ -129,110 +63,6 @@ pub struct App {
     pub list_state: ListState,
     pub datasets: Datasets,
     pub facet_colours: BTreeMap<String, Color>,
-}
-
-pub struct Inputs {
-    _inputs: [Input; 6],
-}
-
-impl Inputs {
-    pub fn new() -> Self {
-        Inputs {
-            _inputs: [
-                Input {
-                    buffer: String::new(),
-                    cursor_position: 0,
-                },
-                Input {
-                    buffer: String::new(),
-                    cursor_position: 0,
-                },
-                Input {
-                    buffer: String::new(),
-                    cursor_position: 0,
-                },
-                Input {
-                    buffer: String::new(),
-                    cursor_position: 0,
-                },
-                Input {
-                    buffer: String::new(),
-                    cursor_position: 0,
-                },
-                Input {
-                    buffer: String::new(),
-                    cursor_position: 0,
-                },
-            ],
-        }
-    }
-    pub fn get(&self, focus: Focus) -> &str {
-        &self._inputs[focus as usize].buffer
-    }
-
-    pub fn get_cursor_position(&self, focus: Focus) -> usize {
-        self._inputs[focus as usize].cursor_position
-    }
-
-    pub fn len(&self, focus: Focus) -> usize {
-        self._inputs[focus as usize].buffer.len()
-    }
-
-    fn clamp_cursor(&self, focus: Focus, new_cursor_pos: usize) -> usize {
-        new_cursor_pos.clamp(0, self.len(focus))
-    }
-
-    fn move_cursor_left(&mut self, focus: Focus) {
-        let cursor_moved_left = self._inputs[focus as usize]
-            .cursor_position
-            .saturating_sub(1);
-        self._inputs[focus as usize].cursor_position = self.clamp_cursor(focus, cursor_moved_left);
-    }
-
-    fn move_cursor_right(&mut self, focus: Focus) {
-        let cursor_moved_right = self._inputs[focus as usize]
-            .cursor_position
-            .saturating_add(1);
-        self._inputs[focus as usize].cursor_position = self.clamp_cursor(focus, cursor_moved_right);
-    }
-
-    fn enter_char(&mut self, focus: Focus, new_char: char) {
-        let cursor_position = self.get_cursor_position(focus);
-        self._inputs[focus as usize]
-            .buffer
-            .insert(cursor_position, new_char);
-
-        self.move_cursor_right(focus);
-    }
-
-    fn delete_char(&mut self, focus: Focus) {
-        let is_not_cursor_leftmost = self.get_cursor_position(focus) != 0;
-        if is_not_cursor_leftmost {
-            let current_index = self.get_cursor_position(focus);
-            let from_left_to_current_index = current_index - 1;
-
-            let before_char_to_delete = self._inputs[focus as usize]
-                .buffer
-                .chars()
-                .take(from_left_to_current_index);
-            let after_char_to_delete = self._inputs[focus as usize]
-                .buffer
-                .chars()
-                .skip(current_index);
-
-            self._inputs[focus as usize].buffer =
-                before_char_to_delete.chain(after_char_to_delete).collect();
-            self.move_cursor_left(focus);
-        }
-    }
-
-    pub fn clear(&mut self, focus: Focus) {
-        self._inputs[focus as usize].buffer.clear();
-    }
-
-    pub fn reset_cursor(&mut self, focus: Focus) {
-        self._inputs[focus as usize].cursor_position = 0;
-    }
 }
 
 impl App {
