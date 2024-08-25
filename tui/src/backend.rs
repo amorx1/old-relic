@@ -102,7 +102,7 @@ pub async fn query_log(
     data_tx: Sender<PayloadType>,
     _ui_rx: MReceiver<UIEvent>,
 ) -> Result<()> {
-    let mut data: Vec<serde_json::Value> = client
+    let data: Vec<serde_json::Value> = client
         .query::<serde_json::Value>(query)
         .await
         .unwrap_or_default();
@@ -116,11 +116,8 @@ pub async fn query_log(
             serde_json::to_string_pretty(&log).unwrap(),
         );
     }
-    data_tx.send(PayloadType::Log(
-        LogPayload { logs }, // data.iter_mut()
-                             //     .map(|v| serde_json::to_string_pretty(v).unwrap())
-                             //     .collect(),
-    ))?;
+
+    data_tx.send(PayloadType::Log(LogPayload { logs }))?;
     Ok(())
 }
 

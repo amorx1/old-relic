@@ -56,16 +56,36 @@ pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_log(app: &mut App, frame: &mut Frame, area: Rect) {
-    let paragraph = Paragraph::new(app.logs.selected().unwrap_or(&String::new()).to_owned())
-        .to_owned()
+    // let paragraph = Paragraph::new(app.logs.selected().unwrap_or(&String::new()).to_owned())
+    //     .to_owned()
+    //     .block(
+    //         Block::default()
+    //             .borders(Borders::ALL)
+    //             .border_type(BorderType::Rounded)
+    //             .title("Log"),
+    //     );
+
+    // let log_str = app.logs.selected().unwrap_or(&Vec::new()).to_owned();
+    // let lines = log_str.split(',').map(Line::from).collect::<Vec<Line>>();
+
+    let logs = app.logs.clone();
+    let lines = logs.selected().unwrap_or(&Vec::new()).to_owned();
+    let list = List::new(lines)
         .block(
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
                 .title("Log"),
-        );
+        )
+        .highlight_style(
+            Style::new()
+                .add_modifier(Modifier::REVERSED)
+                .fg(app.theme.chart_fg),
+        )
+        .highlight_symbol(">>")
+        .repeat_highlight_symbol(true);
 
-    frame.render_widget(paragraph, area);
+    frame.render_stateful_widget(list, area, &mut app.logs.log_item_list_state);
 }
 
 pub fn render_tabs(app: &mut App, frame: &mut Frame, area: Rect) {

@@ -16,6 +16,7 @@ use ratatui::{
     backend::Backend,
     layout::{Constraint, Layout},
     style::{palette::tailwind::Palette, Color},
+    text::Line,
     widgets::ListState,
     Frame, Terminal,
 };
@@ -36,6 +37,7 @@ pub enum Focus {
     SessionLoad = 2,
     SessionSave = 5,
     Default = 3,
+    Log = 6,
 }
 
 pub enum InputMode {
@@ -60,7 +62,7 @@ pub enum Tab {
     Logs = 1,
 }
 
-pub struct App {
+pub struct App<'a> {
     pub session: Session,
     pub theme: Theme,
     pub inputs: Inputs,
@@ -71,11 +73,11 @@ pub struct App {
     pub list_state: ListState,
     pub log_list_state: ListState,
     pub datasets: Datasets,
-    pub logs: Logs,
+    pub logs: Logs<'a>,
     pub facet_colours: BTreeMap<String, Color>,
 }
 
-impl App {
+impl App<'_> {
     pub fn new(palette: &Palette, backend: AppBackend, session: Session) -> Self {
         Self {
             inputs: Inputs::new(),
@@ -139,6 +141,8 @@ impl App {
                             },
                             KeyCode::Char('h') => self.previous_tab(),
                             KeyCode::Char('l') => self.next_tab(),
+                            KeyCode::Char('L') => self.set_focus(Focus::Log),
+                            KeyCode::Esc => self.set_focus(Focus::Default),
                             _ => (),
                         },
 
@@ -250,7 +254,21 @@ impl App {
                         }
                     }
                     PayloadType::Log(payload) => {
-                        self.logs.logs = payload.logs;
+                        let mut logs: BTreeMap<String, Vec<Line<'_>>> = BTreeMap::new();
+                        for (timestamp, log) in payload.logs {
+                            logs.insert(
+                                timestamp,
+                                log.split('\n')
+                                    .map(|v| Line::from(v.to_owned()))
+                                    .collect::<Vec<Line>>(),
+                            );
+                        }
+
+                        self.logs = Logs {
+                            logs,
+                            log_item_list_state: ListState::default(),
+                            selected: String::new(),
+                        };
                     }
                 }
             }
@@ -281,7 +299,7 @@ impl App {
                         render_query_list(self, frame, list_area);
                         render_rename_dialog(self, frame, graph_area);
                     }
-                    Focus::Default | Focus::QueryInput => {
+                    Focus::Default | Focus::QueryInput | Focus::Log => {
                         render_query_box(self, frame, input_area);
                         render_query_list(self, frame, list_area);
                         if let Some(dataset) = self.datasets.selected() {
@@ -305,7 +323,7 @@ impl App {
 
                 match self.focus {
                     Focus::SessionSave => render_save_session(self, frame, area),
-                    Focus::Default | Focus::QueryInput => {
+                    Focus::Default | Focus::QueryInput | Focus::Log => {
                         render_query_box(self, frame, input_area);
                         render_log_list(self, frame, list_area);
                         render_log(self, frame, log_area);
@@ -373,25 +391,46 @@ impl App {
                 self.list_state.select(Some(i));
                 self.datasets.select(i);
             }
-            Tab::Logs => {
-                if self.logs.is_empty() {
-                    return;
-                }
-
-                let i = match self.log_list_state.selected() {
-                    Some(i) => {
-                        if i >= self.logs.len() - 1 {
-                            0
-                        } else {
-                            i + 1
-                        }
+            Tab::Logs => match self.focus {
+                Focus::Log => {
+                    if self.logs.logs.is_empty() {
+                        return;
                     }
-                    None => 0,
-                };
 
-                self.log_list_state.select(Some(i));
-                self.logs.select(i);
-            }
+                    let i = match self.logs.log_item_list_state.selected() {
+                        Some(i) => {
+                            if i >= self.logs.selected().unwrap().len() - 1 {
+                                0
+                            } else {
+                                i + 1
+                            }
+                        }
+                        None => 0,
+                    };
+
+                    self.logs.log_item_list_state.select(Some(i));
+                    // self.logs.select(i);
+                }
+                _ => {
+                    if self.logs.is_empty() {
+                        return;
+                    }
+
+                    let i = match self.log_list_state.selected() {
+                        Some(i) => {
+                            if i >= self.logs.len() - 1 {
+                                0
+                            } else {
+                                i + 1
+                            }
+                        }
+                        None => 0,
+                    };
+
+                    self.log_list_state.select(Some(i));
+                    self.logs.select(i);
+                }
+            },
         }
     }
 
@@ -415,24 +454,44 @@ impl App {
                 self.list_state.select(Some(i));
                 self.datasets.select(i);
             }
-            Tab::Logs => {
-                if self.logs.is_empty() {
-                    return;
-                }
-
-                let i = match self.log_list_state.selected() {
-                    Some(i) => {
-                        if i == 0 {
-                            self.logs.len() - 1
-                        } else {
-                            i - 1
-                        }
+            Tab::Logs => match self.focus {
+                Focus::Log => {
+                    if self.logs.logs.is_empty() {
+                        return;
                     }
-                    None => 0,
-                };
-                self.log_list_state.select(Some(i));
-                self.logs.select(i);
-            }
+
+                    let i = match self.logs.log_item_list_state.selected() {
+                        Some(i) => {
+                            if i == 0 {
+                                self.logs.selected().unwrap().len() - 1
+                            } else {
+                                i - 1
+                            }
+                        }
+                        None => 0,
+                    };
+                    self.logs.log_item_list_state.select(Some(i));
+                    // self.logs.select(i);
+                }
+                _ => {
+                    if self.logs.is_empty() {
+                        return;
+                    }
+
+                    let i = match self.log_list_state.selected() {
+                        Some(i) => {
+                            if i == 0 {
+                                self.logs.len() - 1
+                            } else {
+                                i - 1
+                            }
+                        }
+                        None => 0,
+                    };
+                    self.log_list_state.select(Some(i));
+                    self.logs.select(i);
+                }
+            },
         }
     }
 

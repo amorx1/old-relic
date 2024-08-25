@@ -1,5 +1,7 @@
 use std::collections::{btree_map::Entry, BTreeMap};
 
+use ratatui::{text::Line, widgets::ListState};
+
 use crate::backend::Bounds;
 
 pub struct Dataset {
@@ -15,22 +17,19 @@ pub struct Datasets {
     pub selected: String,
 }
 
-#[derive(Default)]
-pub struct Logs {
-    pub logs: BTreeMap<String, String>,
+#[derive(Default, Clone)]
+pub struct Logs<'a> {
+    pub logs: BTreeMap<String, Vec<Line<'a>>>,
+    pub log_item_list_state: ListState,
     pub selected: String,
 }
 
-impl Logs {
-    pub fn entry(&mut self, entry: String) -> Entry<'_, String, String> {
-        self.logs.entry(entry)
-    }
-
-    pub fn selected(&self) -> Option<&String> {
+impl Logs<'_> {
+    pub fn selected(&self) -> Option<&Vec<Line<'_>>> {
         self.logs.get(&self.selected)
     }
 
-    pub fn iter(&self) -> std::collections::btree_map::Iter<'_, String, String> {
+    pub fn iter(&self) -> std::collections::btree_map::Iter<'_, String, Vec<Line<'_>>> {
         self.logs.iter()
     }
 
