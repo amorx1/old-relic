@@ -5,7 +5,7 @@ use ratatui::{
     symbols::Marker,
     widgets::{
         Axis, Block, BorderType, Borders, Chart, Clear, Dataset, GraphType, LegendPosition, List,
-        Padding, Paragraph,
+        Padding, Paragraph, Tabs,
     },
 };
 use style::palette::tailwind;
@@ -28,6 +28,62 @@ pub const PALETTES: [tailwind::Palette; 9] = [
     tailwind::FUCHSIA,
     tailwind::SKY,
 ];
+
+pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
+    let items = app
+        .logs
+        .logs
+        .keys()
+        .map(|k| k.to_string())
+        .collect::<Vec<String>>();
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .title("Timestamps"),
+        )
+        .highlight_style(
+            Style::new()
+                .add_modifier(Modifier::REVERSED)
+                .fg(app.theme.chart_fg),
+        )
+        .highlight_symbol(">>")
+        .repeat_highlight_symbol(true);
+
+    frame.render_stateful_widget(list, area, &mut app.log_list_state);
+}
+
+pub fn render_log(app: &mut App, frame: &mut Frame, area: Rect) {
+    let paragraph = Paragraph::new(app.logs.selected().unwrap_or(&String::new()).to_owned())
+        .to_owned()
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .title("Log"),
+        );
+
+    frame.render_widget(paragraph, area);
+}
+
+pub fn render_tabs(app: &mut App, frame: &mut Frame, area: Rect) {
+    let titles = vec![Line::from("Graph"), Line::from("Logs")].into_iter();
+    let tabs = Tabs::new(titles)
+        .highlight_style(Style::default().fg(Color::Green).bold())
+        .select(app.tab.clone() as usize)
+        .padding("", "")
+        .divider(" | ")
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .title("Tabs"),
+        );
+
+    frame.render_widget(tabs, area);
+}
 
 pub fn render_splash(_app: &mut App, frame: &mut Frame, area: Rect) {
     let dummy = BigText::builder()

@@ -15,6 +15,43 @@ pub struct Datasets {
     pub selected: String,
 }
 
+#[derive(Default)]
+pub struct Logs {
+    pub logs: BTreeMap<String, String>,
+    pub selected: String,
+}
+
+impl Logs {
+    pub fn entry(&mut self, entry: String) -> Entry<'_, String, String> {
+        self.logs.entry(entry)
+    }
+
+    pub fn selected(&self) -> Option<&String> {
+        self.logs.get(&self.selected)
+    }
+
+    pub fn iter(&self) -> std::collections::btree_map::Iter<'_, String, String> {
+        self.logs.iter()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.logs.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.logs.len()
+    }
+
+    pub fn select(&mut self, i: usize) {
+        self.selected = self
+            .logs
+            .keys()
+            .nth(i)
+            .expect("ERROR: Could not select query!")
+            .to_owned();
+    }
+}
+
 impl Datasets {
     pub fn new() -> Self {
         Datasets {

@@ -1,5 +1,6 @@
-use crate::query::{Timeseries, TimeseriesResult};
+use crate::query::{QueryType, Timeseries, TimeseriesResult};
 use anyhow::Result;
+
 use std::{
     collections::BTreeMap,
     sync::mpsc::{channel, Receiver, Sender},
@@ -31,6 +32,15 @@ impl Default for Bounds {
     }
 }
 
+pub enum PayloadType {
+    Timeseries(Payload),
+    Log(LogPayload),
+}
+
+pub struct LogPayload {
+    pub logs: BTreeMap<String, String>,
+}
+
 pub struct Payload {
     pub query: String,
     pub facets: Vec<String>,
@@ -42,8 +52,8 @@ pub struct Payload {
 pub struct Backend {
     pub client: NewRelicClient,
     pub runtime: Runtime,
-    pub data_tx: Sender<Payload>,
-    pub data_rx: Receiver<Payload>,
+    pub data_tx: Sender<PayloadType>,
+    pub data_rx: Receiver<PayloadType>,
     pub ui_tx: MSender<UIEvent>,
     pub ui_rx: MReceiver<UIEvent>,
 }
@@ -54,7 +64,7 @@ pub enum UIEvent {
 
 impl Backend {
     pub fn new(client: NewRelicClient) -> Self {
-        let (data_tx, data_rx) = channel::<Payload>();
+        let (data_tx, data_rx) = channel::<PayloadType>();
         let (ui_tx, ui_rx) = unbounded::<UIEvent>();
         let runtime = runtime::Builder::new_multi_thread()
             .worker_threads(1)
@@ -73,20 +83,51 @@ impl Backend {
         }
     }
 
-    pub fn add_query(&self, query: NRQLQuery) {
+    pub fn add_query(&self, query: QueryType) {
         let tx = self.data_tx.clone();
         let rx = self.ui_rx.clone();
         let client = self.client.clone();
         self.runtime.spawn(async move {
-            _ = refresh_timeseries(query, client, tx, rx).await;
+            match query {
+                QueryType::Timeseries(query) => _ = refresh_timeseries(query, client, tx, rx).await,
+                QueryType::Log(query) => _ = query_log(query, client, tx, rx).await,
+            }
         });
     }
+}
+
+pub async fn query_log(
+    query: String,
+    client: NewRelicClient,
+    data_tx: Sender<PayloadType>,
+    _ui_rx: MReceiver<UIEvent>,
+) -> Result<()> {
+    let mut data: Vec<serde_json::Value> = client
+        .query::<serde_json::Value>(query)
+        .await
+        .unwrap_or_default();
+
+    let mut logs: BTreeMap<String, String> = BTreeMap::new();
+    for log in data {
+        logs.insert(
+            log.get("timestamp")
+                .expect("ERROR: Log had no timestamp")
+                .to_string(),
+            serde_json::to_string_pretty(&log).unwrap(),
+        );
+    }
+    data_tx.send(PayloadType::Log(
+        LogPayload { logs }, // data.iter_mut()
+                             //     .map(|v| serde_json::to_string_pretty(v).unwrap())
+                             //     .collect(),
+    ))?;
+    Ok(())
 }
 
 pub async fn refresh_timeseries(
     query: NRQLQuery,
     client: NewRelicClient,
-    data_tx: Sender<Payload>,
+    data_tx: Sender<PayloadType>,
     ui_rx: MReceiver<UIEvent>,
 ) -> Result<()> {
     loop {
@@ -136,7 +177,7 @@ pub async fn refresh_timeseries(
                 }
             }
 
-            data_tx.send(Payload {
+            data_tx.send(PayloadType::Timeseries(Payload {
                 query: query.to_string().unwrap(),
                 facets: facet_keys,
                 data: facets,
@@ -145,7 +186,7 @@ pub async fn refresh_timeseries(
                     maxes: max_bounds,
                 },
                 selection: query.select.to_owned(),
-            })?
+            }))?
         }
         sleep(Duration::from_millis(16)).await;
     }

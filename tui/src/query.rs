@@ -3,10 +3,10 @@ use serde::Deserialize;
 
 use crate::parser::parse_nrql;
 
-#[derive(Default, Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub enum QueryType {
-    #[default]
-    Timeseries,
+    Timeseries(NRQLQuery),
+    Log(String),
 }
 
 pub struct NRQLResult {}
