@@ -5,8 +5,8 @@ use crate::{
     query::{QueryType, NRQL},
     ui::{
         render_dashboard, render_graph, render_load_session, render_loading, render_log,
-        render_log_list, render_query_box, render_query_list, render_rename_dialog,
-        render_save_session, render_splash, render_tabs,
+        render_log_detail, render_log_list, render_query_box, render_query_list,
+        render_rename_dialog, render_save_session, render_splash, render_tabs,
     },
 };
 
@@ -38,6 +38,7 @@ pub enum Focus {
     SessionSave = 5,
     Default = 3,
     Log = 6,
+    LogDetail,
 }
 
 pub enum InputMode {
@@ -143,6 +144,11 @@ impl App<'_> {
                             KeyCode::Char('l') => self.next_tab(),
                             KeyCode::Char('L') => self.set_focus(Focus::Log),
                             KeyCode::Esc => self.set_focus(Focus::Default),
+                            KeyCode::Enter => match self.focus {
+                                Focus::Log => self.set_focus(Focus::LogDetail),
+                                Focus::LogDetail => self.set_focus(Focus::Log),
+                                _ => {}
+                            },
                             _ => (),
                         },
 
@@ -299,7 +305,7 @@ impl App<'_> {
                         render_query_list(self, frame, list_area);
                         render_rename_dialog(self, frame, graph_area);
                     }
-                    Focus::Default | Focus::QueryInput | Focus::Log => {
+                    Focus::Default | Focus::QueryInput | Focus::Log | Focus::LogDetail => {
                         render_query_box(self, frame, input_area);
                         render_query_list(self, frame, list_area);
                         if let Some(dataset) = self.datasets.selected() {
@@ -323,10 +329,13 @@ impl App<'_> {
 
                 match self.focus {
                     Focus::SessionSave => render_save_session(self, frame, area),
-                    Focus::Default | Focus::QueryInput | Focus::Log => {
+                    Focus::Default | Focus::QueryInput | Focus::Log | Focus::LogDetail => {
                         render_query_box(self, frame, input_area);
                         render_log_list(self, frame, list_area);
                         render_log(self, frame, log_area);
+                        if self.focus == Focus::LogDetail {
+                            render_log_detail(self, frame, log_area);
+                        }
                     }
                     _ => render_splash(self, frame, area),
                 }

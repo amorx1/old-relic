@@ -29,6 +29,15 @@ pub const PALETTES: [tailwind::Palette; 9] = [
     tailwind::SKY,
 ];
 
+pub fn render_log_detail(app: &mut App, frame: &mut Frame, area: Rect) {
+    let area = centered_rect(60, 20, area);
+    let key_idx = app.logs.log_item_list_state.selected().unwrap();
+    let log = &app.logs.selected().unwrap()[key_idx];
+
+    frame.render_widget(Clear, area);
+    frame.render_widget(log, area);
+}
+
 pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
     let items = app
         .logs
@@ -56,18 +65,6 @@ pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_log(app: &mut App, frame: &mut Frame, area: Rect) {
-    // let paragraph = Paragraph::new(app.logs.selected().unwrap_or(&String::new()).to_owned())
-    //     .to_owned()
-    //     .block(
-    //         Block::default()
-    //             .borders(Borders::ALL)
-    //             .border_type(BorderType::Rounded)
-    //             .title("Log"),
-    //     );
-
-    // let log_str = app.logs.selected().unwrap_or(&Vec::new()).to_owned();
-    // let lines = log_str.split(',').map(Line::from).collect::<Vec<Line>>();
-
     let logs = app.logs.clone();
     let lines = logs.selected().unwrap_or(&Vec::new()).to_owned();
     let list = List::new(lines)
