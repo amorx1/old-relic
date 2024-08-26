@@ -1,6 +1,6 @@
 use crate::{
     backend::{Backend as AppBackend, Bounds, PayloadType, UIEvent},
-    dataset::{Dataset, Datasets, Logs},
+    dataset::{Dataset, Datasets, LogState, Logs},
     input::Inputs,
     query::{QueryType, NRQL},
     ui::{
@@ -160,10 +160,13 @@ impl App<'_> {
                                         let raw_query = self.inputs.get(Focus::QueryInput);
                                         raw_query.to_nrql().map_or_else(
                                             |_| {
-                                                self.add_query(QueryType::Log(raw_query.to_owned()))
+                                                self.add_query(QueryType::Log(
+                                                    raw_query.to_owned(),
+                                                ));
                                             },
                                             |v| self.add_query(QueryType::Timeseries(v)),
                                         );
+                                        self.logs.state = LogState::Loading;
                                         self.inputs.clear(Focus::QueryInput);
                                     }
                                     Focus::Rename => {
@@ -271,6 +274,7 @@ impl App<'_> {
                         }
 
                         self.logs = Logs {
+                            state: LogState::Show,
                             logs,
                             log_item_list_state: ListState::default(),
                             selected: String::new(),
@@ -332,9 +336,15 @@ impl App<'_> {
                     Focus::Default | Focus::QueryInput | Focus::Log | Focus::LogDetail => {
                         render_query_box(self, frame, input_area);
                         render_log_list(self, frame, list_area);
-                        render_log(self, frame, log_area);
-                        if self.focus == Focus::LogDetail {
-                            render_log_detail(self, frame, log_area);
+                        match self.logs.state {
+                            LogState::Show => {
+                                render_log(self, frame, log_area);
+                                if self.focus == Focus::LogDetail {
+                                    render_log_detail(self, frame, log_area);
+                                }
+                            }
+                            LogState::None => render_splash(self, frame, log_area),
+                            LogState::Loading => render_loading(self, frame, log_area),
                         }
                     }
                     _ => render_splash(self, frame, area),

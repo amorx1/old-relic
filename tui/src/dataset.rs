@@ -17,8 +17,17 @@ pub struct Datasets {
     pub selected: String,
 }
 
+#[derive(Clone, Default)]
+pub enum LogState {
+    #[default]
+    None,
+    Loading,
+    Show,
+}
+
 #[derive(Default, Clone)]
 pub struct Logs<'a> {
+    pub state: LogState,
     pub logs: BTreeMap<String, Vec<Line<'a>>>,
     pub log_item_list_state: ListState,
     pub selected: String,
