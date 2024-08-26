@@ -182,7 +182,7 @@ impl App<'_> {
                                     }
                                     Focus::SessionSave => {
                                         match self.inputs.get(Focus::SessionSave) {
-                                            // Load session
+                                            // Save session
                                             "y" | "Y" => {
                                                 self.save_session();
                                             }
