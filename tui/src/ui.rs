@@ -2,16 +2,18 @@ use chrono::{DateTime, Utc};
 
 use ratatui::{
     prelude::*,
+    symbols::Marker,
     widgets::{
         Axis, Block, BorderType, Borders, Chart, Clear, Dataset, GraphType, LegendPosition, List,
-        Padding, Paragraph,
+        Padding, Paragraph, Tabs, Wrap,
     },
 };
 use style::palette::tailwind;
+use throbber_widgets_tui::WhichUse;
 use tui_big_text::{BigText, PixelSize};
 
 use crate::{
-    app::{Focus, InputMode, QUERY, RENAME, SESSION_LOAD},
+    app::{Focus, InputMode},
     App,
 };
 
@@ -27,7 +29,104 @@ pub const PALETTES: [tailwind::Palette; 9] = [
     tailwind::SKY,
 ];
 
-pub fn render_loading(app: &mut App, frame: &mut Frame, area: Rect) {}
+pub fn render_log_detail(app: &mut App, frame: &mut Frame, area: Rect) {
+    let area = centered_rect(60, 20, area);
+    let key_idx = app.logs.log_item_list_state.selected().unwrap();
+    let log = &app.logs.selected().unwrap()[key_idx];
+
+    let paragraph = Paragraph::new(log.clone())
+        .wrap(Wrap { trim: true })
+        .block(Block::default().borders(Borders::ALL))
+        .style(Style::default());
+
+    frame.render_widget(Clear, area);
+    frame.render_widget(paragraph, area);
+}
+
+pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
+    let items = app
+        .logs
+        .logs
+        .keys()
+        .map(|k| k.to_owned())
+        .collect::<Vec<String>>();
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .title("Timestamps"),
+        )
+        .highlight_style(
+            Style::new()
+                .add_modifier(Modifier::REVERSED)
+                .fg(app.theme.chart_fg),
+        )
+        .highlight_symbol(">>")
+        .repeat_highlight_symbol(true);
+
+    frame.render_stateful_widget(list, area, &mut app.log_list_state);
+}
+
+pub fn render_log(app: &mut App, frame: &mut Frame, area: Rect) {
+    let logs = app.logs.clone();
+    let lines = logs.selected().unwrap_or(&vec![]).to_owned();
+    let list = List::new(lines)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .title("Log"),
+        )
+        .highlight_style(
+            Style::new()
+                .add_modifier(Modifier::REVERSED)
+                .fg(app.theme.chart_fg),
+        )
+        .highlight_symbol(">>")
+        .repeat_highlight_symbol(true);
+
+    frame.render_stateful_widget(list, area, &mut app.logs.log_item_list_state);
+}
+
+pub fn render_tabs(app: &mut App, frame: &mut Frame, area: Rect) {
+    let titles = vec![Line::from("Graph"), Line::from("Logs")].into_iter();
+    let tabs = Tabs::new(titles)
+        .highlight_style(Style::default().fg(Color::Green).bold())
+        .select(app.tab.clone() as usize)
+        .padding("", "")
+        .divider(" | ")
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .title("Tabs"),
+        );
+
+    frame.render_widget(tabs, area);
+}
+
+pub fn render_splash(_app: &mut App, frame: &mut Frame, area: Rect) {
+    let dummy = BigText::builder()
+        .pixel_size(PixelSize::Full)
+        .style(Style::new().blue())
+        .lines(vec!["XRELIC".light_green().into()])
+        .build();
+
+    let center = centered_rect(30, 30, area);
+    frame.render_widget(dummy, center);
+}
+
+pub fn render_loading(_app: &mut App, frame: &mut Frame, area: Rect) {
+    let center = centered_rect(5, 5, area);
+    let throbber = throbber_widgets_tui::Throbber::default()
+        .label("Loading data...")
+        .style(Style::default().fg(Color::LightGreen))
+        .throbber_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+        .use_type(WhichUse::Spin);
+    frame.render_widget(throbber, center);
+}
 
 pub fn render_load_session(app: &mut App, frame: &mut Frame, area: Rect) {
     let area = centered_rect(60, 20, area);
@@ -36,14 +135,36 @@ pub fn render_load_session(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let prompt =
         Text::from("A previous session was found. Would you like to reload its queries? y/n");
-    let input = Paragraph::new(app.input_buffer(SESSION_LOAD))
+    let input = Paragraph::new(app.inputs.get(Focus::SessionLoad))
         .style(match app.input_mode {
             InputMode::Normal => Style::default(),
             InputMode::Input => Style::default().fg(app.theme.focus_fg),
         })
         .block(
             Block::default()
-                .padding(Padding::zero())
+                .padding(Padding::ZERO)
+                .borders(Borders::BOTTOM)
+                .border_type(BorderType::Rounded),
+        );
+    frame.render_widget(Clear, area);
+    frame.render_widget(prompt, prompt_area);
+    frame.render_widget(input, input_area);
+}
+
+pub fn render_save_session(app: &mut App, frame: &mut Frame, area: Rect) {
+    let area = centered_rect(60, 20, area);
+    let vertical = Layout::vertical([Constraint::Length(3), Constraint::Length(3)]);
+    let [prompt_area, input_area] = vertical.areas(area);
+
+    let prompt = Text::from("Save session? y/n");
+    let input = Paragraph::new(app.inputs.get(Focus::SessionSave))
+        .style(match app.input_mode {
+            InputMode::Normal => Style::default(),
+            InputMode::Input => Style::default().fg(app.theme.focus_fg),
+        })
+        .block(
+            Block::default()
+                .padding(Padding::ZERO)
                 .borders(Borders::BOTTOM)
                 .border_type(BorderType::Rounded),
         );
@@ -54,7 +175,7 @@ pub fn render_load_session(app: &mut App, frame: &mut Frame, area: Rect) {
 
 pub fn render_dashboard(app: &mut App, frame: &mut Frame, area: Rect) {
     let n_graphs = &app.datasets.len();
-    let areas = match *n_graphs {
+    let areas = match n_graphs {
         0 => vec![],
         1 => vec![area],
         2 => {
@@ -89,13 +210,7 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
                     .data(&points[..])
                     .marker(Marker::Braille)
                     .graph_type(GraphType::Line)
-                    .style(match facet.as_str() {
-                        ".NET" => Style::default().fg(app.theme.net_fg),
-                        "Elasticsearch" => Style::default().fg(app.theme.elastic_fg),
-                        "Web external" => Style::default().fg(app.theme.webex_fg),
-                        "value" => Style::default().fg(app.theme.value_fg),
-                        _ => Style::default(),
-                    })
+                    .style(Style::default().fg(app.facet_colours.get(facet).unwrap().to_owned()))
             })
             .collect::<Vec<_>>()
     });
@@ -169,8 +284,7 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
                 .pixel_size(PixelSize::Full)
                 .style(Style::new().blue())
                 .lines(vec!["XRELIC".light_green().into()])
-                .build()
-                .unwrap();
+                .build();
 
             let center = centered_rect(30, 30, area);
             frame.render_widget(dummy, center);
@@ -184,14 +298,14 @@ pub fn render_rename_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
     let [prompt_area, input_area] = vertical.areas(area);
 
     let prompt = Text::from("Rename query");
-    let input = Paragraph::new(app.input_buffer(RENAME))
+    let input = Paragraph::new(app.inputs.get(Focus::Rename))
         .style(match app.focus {
             Focus::Rename => Style::default().fg(app.theme.focus_fg),
             _ => Style::default(),
         })
         .block(
             Block::default()
-                .padding(Padding::zero())
+                .padding(Padding::ZERO)
                 .borders(Borders::BOTTOM),
         );
 
@@ -228,7 +342,7 @@ pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
-    let input = Paragraph::new(app.inputs[QUERY as usize].buffer.as_str())
+    let input = Paragraph::new(app.inputs.get(Focus::QueryInput))
         .style(match app.focus {
             Focus::QueryInput => Style::default().fg(app.theme.focus_fg),
             _ => Style::default(),
@@ -243,7 +357,7 @@ pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
-    let datasets = app.datasets.get(&app.selected_query).map(|data| {
+    let datasets = app.datasets.selected().map(|data| {
         data.facets
             .iter()
             .map(|(facet, points)| {
@@ -252,94 +366,76 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
                     .data(&points[..])
                     .marker(Marker::Braille)
                     .graph_type(GraphType::Line)
-                    .style(match facet.as_str() {
-                        ".NET" => Style::default().fg(app.theme.net_fg),
-                        "Elasticsearch" => Style::default().fg(app.theme.elastic_fg),
-                        "Web external" => Style::default().fg(app.theme.webex_fg),
-                        "value" => Style::default().fg(app.theme.value_fg),
-                        _ => Style::default(),
-                    })
+                    .style(Style::default().fg(app.facet_colours.get(facet).unwrap().to_owned()))
             })
             .collect::<Vec<_>>()
     });
 
-    match datasets {
-        Some(datasets) => {
-            let dataset = app
-                .datasets
-                .get(&app.selected_query)
-                .expect("ERROR: No bounds found for selected query");
-            let bounds = dataset.bounds;
-            let selection = &dataset.selection;
+    if let Some(datasets) = datasets {
+        let dataset = app
+            .datasets
+            .selected()
+            .expect("ERROR: No bounds found for selected query");
 
-            let (min_x, mut min_y) = bounds.mins;
-            let (_, mut max_y) = bounds.maxes;
-            let mut half_y = (max_y - min_y) / 2_f64;
+        let bounds = dataset.bounds;
+        let selection = &dataset.selection;
 
-            min_y = f64::round(min_y);
-            max_y = f64::round(max_y);
-            half_y = f64::round(half_y);
+        let (min_x, mut min_y) = bounds.mins;
+        let (_, mut max_y) = bounds.maxes;
+        let mut half_y = (max_y - min_y) / 2_f64;
 
-            // Create the X axis and define its properties
-            let x_axis = Axis::default()
-                .title("Time".fg(app.theme.chart_fg))
-                .style(Style::default().fg(app.theme.chart_fg))
-                .bounds([min_x, Utc::now().timestamp() as f64])
-                .labels(vec![
-                    DateTime::from_timestamp(min_x as i64, 0)
-                        .unwrap()
-                        .time()
-                        .to_string()
-                        .fg(app.theme.chart_fg)
-                        .bold(),
-                    DateTime::from_timestamp(Utc::now().timestamp(), 0)
-                        .unwrap()
-                        .to_string()
-                        .fg(app.theme.chart_fg)
-                        .bold(),
-                ]);
+        min_y = f64::round(min_y);
+        max_y = f64::round(max_y);
+        half_y = f64::round(half_y);
 
-            // Create the Y axis and define its properties
-            let y_axis = Axis::default()
-                .title(selection.clone().fg(app.theme.chart_fg))
-                .style(Style::default().fg(app.theme.chart_fg))
-                .bounds([min_y, max_y])
-                .labels(vec![
-                    min_y.to_string().fg(app.theme.chart_fg).bold(),
-                    half_y.to_string().fg(app.theme.chart_fg).bold(),
-                    max_y.to_string().fg(app.theme.chart_fg).bold(),
-                ]);
+        // Create the X axis and define its properties
+        let x_axis = Axis::default()
+            .title("Time".fg(app.theme.chart_fg))
+            .style(Style::default().fg(app.theme.chart_fg))
+            .bounds([min_x, Utc::now().timestamp() as f64])
+            .labels(vec![
+                DateTime::from_timestamp(min_x as i64, 0)
+                    .unwrap()
+                    .time()
+                    .to_string()
+                    .fg(app.theme.chart_fg)
+                    .bold(),
+                DateTime::from_timestamp(Utc::now().timestamp(), 0)
+                    .unwrap()
+                    .to_string()
+                    .fg(app.theme.chart_fg)
+                    .bold(),
+            ]);
 
-            let legend_position = match &datasets.len() {
-                1 => None,
-                _ => Some(LegendPosition::TopRight),
-            };
+        // Create the Y axis and define its properties
+        let y_axis = Axis::default()
+            .title(selection.clone().fg(app.theme.chart_fg))
+            .style(Style::default().fg(app.theme.chart_fg))
+            .bounds([min_y, max_y])
+            .labels(vec![
+                min_y.to_string().fg(app.theme.chart_fg).bold(),
+                half_y.to_string().fg(app.theme.chart_fg).bold(),
+                max_y.to_string().fg(app.theme.chart_fg).bold(),
+            ]);
 
-            // Create the chart and link all the parts together
-            let chart = Chart::new(datasets)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_style(Style::default().fg(app.theme.chart_fg))
-                        .border_type(BorderType::Thick)
-                        .border_type(BorderType::Rounded),
-                )
-                .legend_position(legend_position)
-                .x_axis(x_axis)
-                .y_axis(y_axis);
-            frame.render_widget(chart, area);
-        }
-        None => {
-            let dummy = BigText::builder()
-                .pixel_size(PixelSize::Full)
-                .style(Style::new().blue())
-                .lines(vec!["XRELIC".light_green().into()])
-                .build()
-                .unwrap();
+        let legend_position = match &datasets.len() {
+            1 => None,
+            _ => Some(LegendPosition::TopRight),
+        };
 
-            let center = centered_rect(30, 30, area);
-            frame.render_widget(dummy, center);
-        }
+        // Create the chart and link all the parts together
+        let chart = Chart::new(datasets)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(app.theme.chart_fg))
+                    .border_type(BorderType::Thick)
+                    .border_type(BorderType::Rounded),
+            )
+            .legend_position(legend_position)
+            .x_axis(x_axis)
+            .y_axis(y_axis);
+        frame.render_widget(chart, area);
     }
     // frame.render_widget(chart, frame.size());
 }

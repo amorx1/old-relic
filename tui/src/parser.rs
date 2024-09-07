@@ -46,6 +46,7 @@ fn parse_from(input: &str) -> IResult<&str, &str> {
     take_until("SELECT")(remainder)
 }
 
+// TODO: Handle missing components
 pub fn parse_nrql(input: &str) -> Result<HashMap<String, String>> {
     let (remainder, from) = parse_from(input).map_err(|_| anyhow!("Parsing Error! : FROM"))?;
     let (remainder, select) =

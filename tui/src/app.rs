@@ -1,46 +1,44 @@
 use crate::{
-    backend::{Backend as AppBackend, Bounds},
-    query::{NRQLQuery, NRQL},
+    backend::{Backend as AppBackend, Bounds, PayloadType, UIEvent},
+    dataset::{Dataset, Datasets, LogState, Logs},
+    input::Inputs,
+    query::{QueryType, NRQL},
     ui::{
-        render_dashboard, render_graph, render_load_session, render_loading, render_query_box,
-        render_query_list, render_rename_dialog,
+        render_dashboard, render_graph, render_load_session, render_loading, render_log,
+        render_log_detail, render_log_list, render_query_box, render_query_list,
+        render_rename_dialog, render_save_session, render_splash, render_tabs,
     },
 };
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use rand::{thread_rng, Rng};
 use ratatui::{
     backend::Backend,
     layout::{Constraint, Layout},
-    style::{
-        palette::tailwind::{self, Palette},
-        Color,
-    },
+    style::{palette::tailwind::Palette, Color, Style, Stylize},
+    text::Line,
     widgets::ListState,
     Frame, Terminal,
 };
 use std::{
     collections::{btree_map::Entry, BTreeMap},
-    // fs::File,
-    // io::Write,
+    fs::{self, OpenOptions},
+    io::Write,
+    path::PathBuf,
     time::Duration,
 };
 use tokio::io;
 
-pub const QUERY: isize = 0;
-pub const RENAME: isize = 1;
-pub const SESSION_LOAD: isize = 2;
-pub const DEFAULT: isize = 3;
-pub const DASHBOARD: isize = 4;
-pub const LOADING: isize = 5;
-
 #[derive(Clone, Copy, PartialEq)]
 pub enum Focus {
-    QueryInput = QUERY,
-    Rename = RENAME,
-    Dashboard = DASHBOARD,
-    SessionLoad = SESSION_LOAD,
-    Loading = LOADING,
-    Default = DEFAULT,
+    QueryInput = 0,
+    Rename = 1,
+    Dashboard = 4,
+    SessionLoad = 2,
+    SessionSave = 5,
+    Default = 3,
+    Log = 6,
+    LogDetail,
 }
 
 pub enum InputMode {
@@ -48,110 +46,93 @@ pub enum InputMode {
     Input,
 }
 
-pub struct Input {
-    pub buffer: String,
-    pub cursor_position: usize,
-}
-
-pub struct Dataset {
-    pub query_alias: Option<String>,
-    pub facets: BTreeMap<String, Vec<(f64, f64)>>,
-    pub bounds: Bounds,
-    pub selection: String,
-}
-
 pub struct Theme {
     pub focus_fg: Color,
     pub chart_fg: Color,
-    pub elastic_fg: Color,
-    pub net_fg: Color,
-    pub webex_fg: Color,
-    pub value_fg: Color,
 }
 
-pub struct App {
-    pub session: Option<BTreeMap<String, String>>,
+pub struct Session {
+    pub is_loaded: bool,
+    pub queries: Option<BTreeMap<String, String>>,
+    pub session_path: Box<PathBuf>,
+}
+
+#[derive(Clone)]
+pub enum Tab {
+    Graph = 0,
+    Logs = 1,
+}
+
+pub struct App<'a> {
+    pub session: Session,
     pub theme: Theme,
-    pub inputs: [Input; 4],
+    pub inputs: Inputs,
     pub input_mode: InputMode,
     pub focus: Focus,
+    pub tab: Tab,
     pub backend: AppBackend,
-    pub selected_query: String,
     pub list_state: ListState,
-    pub datasets: BTreeMap<String, Dataset>,
+    pub log_list_state: ListState,
+    pub datasets: Datasets,
+    pub logs: Logs<'a>,
+    pub facet_colours: BTreeMap<String, Color>,
 }
 
-impl App {
-    pub fn new(
-        palette: &Palette,
-        backend: AppBackend,
-        session: Option<BTreeMap<String, String>>,
-    ) -> Self {
+impl App<'_> {
+    pub fn new(palette: &Palette, backend: AppBackend, session: Session) -> Self {
         Self {
-            inputs: [
-                Input {
-                    buffer: "".to_owned(),
-                    cursor_position: 0,
-                },
-                Input {
-                    buffer: "".to_owned(),
-                    cursor_position: 0,
-                },
-                Input {
-                    buffer: "".to_owned(),
-                    cursor_position: 0,
-                },
-                Input {
-                    buffer: "".to_owned(),
-                    cursor_position: 0,
-                },
-            ],
+            inputs: Inputs::new(),
             session,
             theme: Theme {
                 focus_fg: palette.c500,
                 chart_fg: palette.c900,
-                elastic_fg: palette.c400,
-                net_fg: palette.c400,
-                webex_fg: tailwind::AMBER.c400,
-                value_fg: palette.c400,
             },
             input_mode: InputMode::Normal,
+            tab: Tab::Graph,
             focus: Focus::Default,
             backend,
-            selected_query: String::new(),
             list_state: ListState::default(),
-            datasets: BTreeMap::default(),
+            log_list_state: ListState::default(),
+            datasets: Datasets::new(),
+            logs: Logs::default(),
+            facet_colours: BTreeMap::default(),
         }
     }
 
     pub fn run<B: Backend>(mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
+        let mut rng = thread_rng();
         loop {
             terminal.draw(|f| self.ui(f))?;
 
-            if self.session.is_some() {
+            // Session Load
+            if !self.session.is_loaded {
                 self.focus = Focus::SessionLoad;
-                self.input_mode = InputMode::Input;
+                self.set_input_mode(InputMode::Input);
             }
 
-            // Manual event handlers.
+            // Event handlers
             if let Ok(true) = event::poll(Duration::from_millis(50)) {
                 if let Event::Key(key) = event::read()? {
                     match self.input_mode {
+                        // Normal Mode
                         InputMode::Normal if key.kind == KeyEventKind::Press => match key.code {
-                            KeyCode::Char('q') => return Ok(()),
+                            KeyCode::Char('q') => {
+                                self.set_focus(Focus::SessionSave);
+                                self.set_input_mode(InputMode::Input);
+                            }
                             KeyCode::Char('e') => {
                                 self.set_focus(Focus::QueryInput);
-                                self.input_mode = InputMode::Input;
+                                self.set_input_mode(InputMode::Input);
                             }
                             KeyCode::Char('j') => self.next(),
                             KeyCode::Char('k') => self.previous(),
-                            KeyCode::Char('x') => self.delete(),
+                            KeyCode::Char('x') => self.delete_query(),
                             KeyCode::Char('r') => match self.focus {
                                 Focus::QueryInput => {}
                                 _ => {
                                     if !self.datasets.is_empty() {
                                         self.set_focus(Focus::Rename);
-                                        self.input_mode = InputMode::Input;
+                                        self.set_input_mode(InputMode::Input);
                                     }
                                 }
                             },
@@ -159,65 +140,102 @@ impl App {
                                 Focus::Dashboard => self.set_focus(Focus::Default),
                                 _ => self.set_focus(Focus::Dashboard),
                             },
+                            KeyCode::Char('T') => self.next_tab(),
+                            KeyCode::Esc => self.set_focus(Focus::Default),
+                            KeyCode::Enter => match self.focus {
+                                Focus::Log => self.set_focus(Focus::LogDetail),
+                                Focus::LogDetail => {
+                                    let key_idx = self.logs.log_item_list_state.selected().unwrap();
+                                    let log = &self.logs.selected().unwrap()[key_idx].to_string();
+                                    let correlation_id = log
+                                        .split(' ')
+                                        .last()
+                                        .unwrap()
+                                        .trim_matches(|p| char::is_ascii_punctuation(&p));
+                                    let query = format!("SELECT * FROM Log WHERE allColumnSearch('{}', insensitive: true)", correlation_id);
+
+                                    self.add_query(QueryType::Log(query));
+                                    self.set_focus(Focus::Default);
+                                }
+                                Focus::Default => self.set_focus(Focus::Log),
+                                _ => {}
+                            },
                             _ => (),
                         },
+
+                        // Input Mode
                         InputMode::Input if key.kind == KeyEventKind::Press => match key.code {
                             KeyCode::Enter => {
                                 match self.focus {
                                     Focus::QueryInput => {
-                                        if let Ok(query) = self.input_buffer(QUERY).to_nrql() {
-                                            self.add_query(query);
-                                        }
+                                        let raw_query = self.inputs.get(Focus::QueryInput);
+                                        raw_query.to_nrql().map_or_else(
+                                            |_| {
+                                                self.add_query(QueryType::Log(
+                                                    raw_query.to_owned(),
+                                                ));
+                                            },
+                                            |v| self.add_query(QueryType::Timeseries(v)),
+                                        );
+                                        self.logs.state = LogState::Loading;
+                                        self.inputs.clear(Focus::QueryInput);
                                     }
                                     Focus::Rename => {
-                                        self.rename_current_query();
+                                        self.rename_query(
+                                            self.datasets.selected.to_owned(),
+                                            self.inputs.get(Focus::Rename).to_owned(),
+                                        );
                                     }
                                     Focus::SessionLoad => {
-                                        match self.input_buffer(SESSION_LOAD) {
+                                        match self.inputs.get(Focus::SessionLoad) {
                                             // Load session
                                             "y" | "Y" => {
-                                                let session =
-                                                    self.session.clone().unwrap().into_iter();
-                                                for (_alias, query) in session {
-                                                    if let Ok(query) = query.trim().to_nrql() {
-                                                        self.add_query(query);
-                                                        // self.set_focus(Focus::Loading);
-                                                    }
-                                                }
-                                                // };
+                                                self.load_session();
                                             }
                                             // Don't load session
+                                            _ => {
+                                                self.session.is_loaded = true;
+                                            }
+                                        }
+                                        // Update focus to default
+                                        self.set_focus(Focus::Default);
+                                    }
+                                    Focus::SessionSave => {
+                                        match self.inputs.get(Focus::SessionSave) {
+                                            // Save session
+                                            "y" | "Y" => {
+                                                self.save_session();
+                                            }
                                             _ => {}
                                         }
-                                        // Clear previous session once loaded
-                                        self.session = None;
-
-                                        // Update focus to home
-                                        self.set_focus(Focus::Default);
+                                        return Ok(());
                                     }
                                     _ => {}
                                 };
-                                self.inputs[self.focus as usize].buffer.clear();
-                                self.reset_cursor();
+                                self.inputs.clear(self.focus);
+                                self.inputs.reset_cursor(self.focus);
                                 self.set_focus(Focus::Default);
-                                self.input_mode = InputMode::Normal;
+                                self.set_input_mode(InputMode::Normal);
                             }
                             KeyCode::Char(to_insert) => {
-                                self.enter_char(to_insert);
+                                self.inputs.enter_char(self.focus, to_insert);
                             }
                             KeyCode::Backspace => {
-                                self.delete_char();
+                                self.inputs.delete_char(self.focus);
                             }
                             KeyCode::Left => {
-                                self.move_cursor_left();
+                                self.inputs.move_cursor_left(self.focus);
                             }
                             KeyCode::Right => {
-                                self.move_cursor_right();
+                                self.inputs.move_cursor_right(self.focus);
                             }
-                            KeyCode::Esc => {
-                                self.set_focus(Focus::Default);
-                                self.input_mode = InputMode::Normal;
-                            }
+                            KeyCode::Esc => match self.focus {
+                                Focus::SessionLoad | Focus::SessionSave => {}
+                                _ => {
+                                    self.set_focus(Focus::Default);
+                                    self.set_input_mode(InputMode::Normal);
+                                }
+                            },
                             _ => {}
                         },
                         _ => {}
@@ -226,208 +244,361 @@ impl App {
             }
 
             while let Some(payload) = self.backend.data_rx.try_iter().next() {
-                if let Entry::Vacant(e) = self.datasets.entry(payload.query.clone()) {
-                    e.insert(Dataset {
-                        query_alias: None,
-                        facets: payload.data,
-                        bounds: payload.bounds,
-                        selection: payload.selection,
-                    });
-                } else {
-                    _ = self
-                        .datasets
-                        .entry(payload.query.to_owned())
-                        .and_modify(|data| {
-                            data.facets = payload.data;
-                            data.bounds = payload.bounds;
-                        })
+                match payload {
+                    PayloadType::Timeseries(payload) => {
+                        if let Entry::Vacant(e) = self.datasets.entry(payload.query.clone()) {
+                            e.insert(Dataset {
+                                query_alias: None,
+                                facets: payload.data,
+                                bounds: payload.bounds,
+                                selection: payload.selection,
+                                has_data: true,
+                            });
+                        } else {
+                            _ = self
+                                .datasets
+                                .entry(payload.query.to_owned())
+                                .and_modify(|data| {
+                                    data.facets = payload.data;
+                                    data.bounds = payload.bounds;
+                                    data.has_data = true
+                                })
+                        }
+
+                        for facet_key in payload.facets {
+                            // Only add facet key if not present
+                            if let Entry::Vacant(e) = self.facet_colours.entry(facet_key) {
+                                e.insert(Color::Rgb(
+                                    rng.gen::<u8>(),
+                                    rng.gen::<u8>(),
+                                    rng.gen::<u8>(),
+                                ));
+                            }
+                        }
+                    }
+                    PayloadType::Log(payload) => {
+                        let mut logs: BTreeMap<String, Vec<Line<'_>>> = BTreeMap::new();
+                        for (timestamp, log) in payload.logs {
+                            logs.insert(
+                                timestamp,
+                                log.split('\n')
+                                    .map(|v| {
+                                        if v.contains("CorrelationId") {
+                                            Line::from(v.to_owned()).style(
+                                                Style::default().bold().fg(Color::LightGreen),
+                                            )
+                                        } else if v.contains("level") && v.contains("Error") {
+                                            Line::from(v.to_owned())
+                                                .style(Style::default().bold().fg(Color::LightRed))
+                                        } else {
+                                            Line::from(v.to_owned())
+                                        }
+                                    })
+                                    .collect::<Vec<Line>>(),
+                            );
+                        }
+
+                        self.logs = Logs {
+                            state: LogState::Show,
+                            logs,
+                            log_item_list_state: ListState::default(),
+                            selected: String::new(),
+                        };
+                    }
                 }
             }
         }
     }
 
     pub fn ui(&mut self, frame: &mut Frame) {
-        if self.focus == Focus::Loading {
-            render_loading(self, frame, frame.size());
-        }
-        if self.focus == Focus::SessionLoad {
-            render_load_session(self, frame, frame.size());
-            return;
-        }
-        if self.focus == Focus::Dashboard {
-            render_dashboard(self, frame, frame.size());
-            return;
-        }
-        let area = frame.size();
-        // TODO: Possible to pre-compute?
-        let horizontal = Layout::horizontal([Constraint::Percentage(15), Constraint::Min(20)]);
-        let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(20)]);
-        let [input_area, rest] = vertical.areas(area);
-        let [list_area, graph_area] = horizontal.areas(rest);
+        let area = frame.area();
+        let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]);
+        let [header_area, area] = vertical.areas(area);
 
-        render_query_box(self, frame, input_area);
-        render_query_list(self, frame, list_area);
-        match self.focus {
-            Focus::Default | Focus::QueryInput => {
-                render_graph(self, frame, graph_area);
+        render_tabs(self, frame, header_area);
+
+        match self.tab {
+            Tab::Graph => {
+                let horizontal =
+                    Layout::horizontal([Constraint::Percentage(15), Constraint::Min(20)]);
+                let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(20)]);
+                let [input_area, rest] = vertical.areas(area);
+                let [list_area, graph_area] = horizontal.areas(rest);
+
+                match self.focus {
+                    Focus::SessionSave => render_save_session(self, frame, area),
+                    Focus::SessionLoad => render_load_session(self, frame, area),
+                    Focus::Dashboard => render_dashboard(self, frame, area),
+                    Focus::Rename => {
+                        render_query_box(self, frame, input_area);
+                        render_query_list(self, frame, list_area);
+                        render_rename_dialog(self, frame, graph_area);
+                    }
+                    Focus::Default | Focus::QueryInput | Focus::Log | Focus::LogDetail => {
+                        render_query_box(self, frame, input_area);
+                        render_query_list(self, frame, list_area);
+                        if let Some(dataset) = self.datasets.selected() {
+                            if dataset.has_data {
+                                render_graph(self, frame, graph_area);
+                            } else {
+                                render_loading(self, frame, graph_area);
+                            }
+                        } else {
+                            render_splash(self, frame, graph_area);
+                        }
+                    }
+                }
             }
-            Focus::Rename => {
-                render_rename_dialog(self, frame, graph_area);
+            Tab::Logs => {
+                let horizontal =
+                    Layout::horizontal([Constraint::Percentage(15), Constraint::Min(20)]);
+                let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(20)]);
+                let [input_area, rest] = vertical.areas(area);
+                let [list_area, log_area] = horizontal.areas(rest);
+
+                match self.focus {
+                    Focus::SessionSave => render_save_session(self, frame, area),
+                    Focus::Default | Focus::QueryInput | Focus::Log | Focus::LogDetail => {
+                        render_query_box(self, frame, input_area);
+                        render_log_list(self, frame, list_area);
+                        match self.logs.state {
+                            LogState::Show => {
+                                render_log(self, frame, log_area);
+                                if self.focus == Focus::LogDetail {
+                                    render_log_detail(self, frame, log_area);
+                                }
+                            }
+                            LogState::None => render_splash(self, frame, log_area),
+                            LogState::Loading => render_loading(self, frame, log_area),
+                        }
+                    }
+                    _ => render_splash(self, frame, area),
+                }
             }
-            // Should never be reached
-            _ => panic!(),
         }
     }
 
-    fn rename_current_query(&mut self) {
-        self.datasets
-            .entry(self.selected_query.to_owned())
-            .and_modify(|v| v.query_alias = Some(self.inputs[RENAME as usize].buffer.to_owned()));
+    fn rename_query(&mut self, query: String, alias: String) {
+        if let Entry::Vacant(e) = self.datasets.entry(query.to_owned()) {
+            e.insert(Dataset {
+                has_data: false,
+                query_alias: Some(alias),
+                facets: BTreeMap::default(),
+                bounds: Bounds::default(),
+                selection: String::new(),
+            });
+        } else {
+            _ = self.datasets.entry(query.to_owned()).and_modify(|data| {
+                data.query_alias = Some(alias);
+            })
+        }
     }
 
-    pub fn input_buffer(&self, focus: isize) -> &str {
-        self.inputs[focus as usize].buffer.as_str()
-    }
-
-    fn add_query(&self, query: NRQLQuery) {
+    fn add_query(&self, query: QueryType) {
         self.backend.add_query(query);
-    }
-
-    fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
-        new_cursor_pos.clamp(0, self.inputs[self.focus as usize].buffer.len())
-    }
-
-    fn reset_cursor(&mut self) {
-        self.inputs[self.focus as usize].cursor_position = 0;
-    }
-
-    fn move_cursor_left(&mut self) {
-        let cursor_moved_left = self.inputs[self.focus as usize]
-            .cursor_position
-            .saturating_sub(1);
-        self.inputs[self.focus as usize].cursor_position = self.clamp_cursor(cursor_moved_left);
-    }
-
-    fn move_cursor_right(&mut self) {
-        let cursor_moved_right = self.inputs[self.focus as usize]
-            .cursor_position
-            .saturating_add(1);
-        self.inputs[self.focus as usize].cursor_position = self.clamp_cursor(cursor_moved_right);
-    }
-
-    fn enter_char(&mut self, new_char: char) {
-        let cursor_position = self.inputs[self.focus as usize].cursor_position;
-        self.inputs[self.focus as usize]
-            .buffer
-            .insert(cursor_position, new_char);
-
-        self.move_cursor_right();
-    }
-
-    fn delete_char(&mut self) {
-        let is_not_cursor_leftmost = self.inputs[self.focus as usize].cursor_position != 0;
-        if is_not_cursor_leftmost {
-            let current_index = self.inputs[self.focus as usize].cursor_position;
-            let from_left_to_current_index = current_index - 1;
-
-            let before_char_to_delete = self.inputs[self.focus as usize]
-                .buffer
-                .chars()
-                .take(from_left_to_current_index);
-            let after_char_to_delete = self.inputs[self.focus as usize]
-                .buffer
-                .chars()
-                .skip(current_index);
-
-            self.inputs[self.focus as usize].buffer =
-                before_char_to_delete.chain(after_char_to_delete).collect();
-            self.move_cursor_left();
-        }
     }
 
     pub fn set_focus(&mut self, focus: Focus) {
         self.focus = focus
     }
 
-    pub fn delete(&mut self) {
-        let i = self.list_state.selected().unwrap();
-        let to_delete = self
-            .datasets
-            .keys()
-            .nth(i)
-            .cloned()
-            .expect("ERROR: Could not index query for deletion!");
+    pub fn set_input_mode(&mut self, mode: InputMode) {
+        self.input_mode = mode;
+    }
 
-        let (removed, _) = self.datasets.remove_entry(&to_delete).unwrap();
+    pub fn delete_query(&mut self) {
+        let i = self.list_state.selected().unwrap();
+
+        let removed = self.datasets.remove_entry(i);
         // TODO: Fix deleted queries reappearing on new data!
-        _ = self.backend.ui_tx.send(removed);
+        _ = self.backend.ui_tx.send(UIEvent::DeleteQuery(removed));
     }
 
     pub fn next(&mut self) {
-        if self.datasets.is_empty() {
-            return;
-        }
-
-        let i = match self.list_state.selected() {
-            Some(i) => {
-                if i >= self.datasets.len() - 1 {
-                    0
-                } else {
-                    i + 1
+        match self.tab {
+            Tab::Graph => {
+                if self.datasets.is_empty() {
+                    return;
                 }
+
+                let i = match self.list_state.selected() {
+                    Some(i) => {
+                        if i >= self.datasets.len() - 1 {
+                            0
+                        } else {
+                            i + 1
+                        }
+                    }
+                    None => 0,
+                };
+
+                self.list_state.select(Some(i));
+                self.datasets.select(i);
             }
-            None => 0,
-        };
-        self.list_state.select(Some(i));
-        self.selected_query = self
-            .datasets
-            .keys()
-            .nth(i)
-            .expect("ERROR: Could not select query!")
-            .to_owned();
+            Tab::Logs => match self.focus {
+                Focus::Log => {
+                    if self.logs.logs.is_empty() {
+                        return;
+                    }
+
+                    let i = match self.logs.log_item_list_state.selected() {
+                        Some(i) => {
+                            if i >= self.logs.selected().unwrap().len() - 1 {
+                                0
+                            } else {
+                                i + 1
+                            }
+                        }
+                        None => 0,
+                    };
+
+                    self.logs.log_item_list_state.select(Some(i));
+                    // self.logs.select(i);
+                }
+                _ => {
+                    if self.logs.is_empty() {
+                        return;
+                    }
+
+                    let i = match self.log_list_state.selected() {
+                        Some(i) => {
+                            if i >= self.logs.len() - 1 {
+                                0
+                            } else {
+                                i + 1
+                            }
+                        }
+                        None => 0,
+                    };
+
+                    self.log_list_state.select(Some(i));
+                    self.logs.select(i);
+                }
+            },
+        }
     }
 
     pub fn previous(&mut self) {
-        if self.datasets.is_empty() {
-            return;
-        }
-
-        let i = match self.list_state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.datasets.len() - 1
-                } else {
-                    i - 1
+        match self.tab {
+            Tab::Graph => {
+                if self.datasets.is_empty() {
+                    return;
                 }
+
+                let i = match self.list_state.selected() {
+                    Some(i) => {
+                        if i == 0 {
+                            self.datasets.len() - 1
+                        } else {
+                            i - 1
+                        }
+                    }
+                    None => 0,
+                };
+                self.list_state.select(Some(i));
+                self.datasets.select(i);
             }
-            None => 0,
-        };
-        self.list_state.select(Some(i));
-        self.selected_query = self
-            .datasets
-            .keys()
-            .nth(i)
-            .expect("ERROR: Could not select query!")
-            .to_owned();
+            Tab::Logs => match self.focus {
+                Focus::Log => {
+                    if self.logs.logs.is_empty() {
+                        return;
+                    }
+
+                    let i = match self.logs.log_item_list_state.selected() {
+                        Some(i) => {
+                            if i == 0 {
+                                self.logs.selected().unwrap().len() - 1
+                            } else {
+                                i - 1
+                            }
+                        }
+                        None => 0,
+                    };
+                    self.logs.log_item_list_state.select(Some(i));
+                    // self.logs.select(i);
+                }
+                _ => {
+                    if self.logs.is_empty() {
+                        return;
+                    }
+
+                    let i = match self.log_list_state.selected() {
+                        Some(i) => {
+                            if i == 0 {
+                                self.logs.len() - 1
+                            } else {
+                                i - 1
+                            }
+                        }
+                        None => 0,
+                    };
+                    self.log_list_state.select(Some(i));
+                    self.logs.select(i);
+                }
+            },
+        }
     }
 
-    // TODO: Prompt user for session save on exit (q)
-    // pub fn save_session(&self) {
-    //     let output = self
-    //         .datasets
-    //         .iter()
-    //         .map(|(q, data)| {
-    //             (
-    //                 data.query_alias.clone().unwrap_or(q.to_owned()),
-    //                 q.to_owned(),
-    //             )
-    //         })
-    //         .collect::<BTreeMap<String, String>>();
+    pub fn load_session(&mut self) {
+        let session_path = self.session.session_path.clone();
+        let yaml = fs::read_to_string(*session_path).expect("ERROR: Could not read session file!");
+        let session_queries: Option<BTreeMap<String, String>> =
+            serde_yaml::from_str(&yaml).expect("ERROR: Could not deserialize session file!");
 
-    //     let yaml: String =
-    //         serde_yaml::to_string(&output).expect("ERROR: Could not serialize queries!");
-    //     let mut file = File::open("").expect("ERROR: Could not open file!");
-    //     file.write_all(yaml.as_bytes())
-    //         .expect("ERROR: Could not write to file!");
-    // }
+        if let Some(queries) = session_queries {
+            let iter = queries.into_iter();
+            for (alias, query) in iter {
+                // TODO: Avoid this
+                let clean_query = query.replace("as value", "");
+                if let Ok(parsed_query) = clean_query.trim().to_nrql() {
+                    // TODO: Handle Log session
+                    self.add_query(QueryType::Timeseries(parsed_query.clone()));
+                    self.rename_query(parsed_query.to_string().unwrap(), alias);
+                }
+            }
+        }
+
+        self.session.is_loaded = true;
+    }
+
+    pub fn save_session(&self) {
+        let output = self
+            .datasets
+            .iter()
+            .map(|(q, data)| {
+                (
+                    data.query_alias.clone().unwrap_or(q.to_owned()),
+                    q.to_owned(),
+                )
+            })
+            .collect::<BTreeMap<String, String>>();
+
+        let yaml: String =
+            serde_yaml::to_string(&output).expect("ERROR: Could not serialize queries!");
+        let session_path = self.session.session_path.clone();
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(*session_path)
+            .expect("ERROR: Could not open file!");
+        file.write_all(yaml.as_bytes())
+            .expect("ERROR: Could not write to file!");
+    }
+
+    fn previous_tab(&mut self) {
+        match self.tab {
+            Tab::Graph => self.tab = Tab::Logs,
+            Tab::Logs => self.tab = Tab::Graph,
+        }
+    }
+
+    fn next_tab(&mut self) {
+        // TODO: Handle n tabs
+        match self.tab {
+            Tab::Graph => self.tab = Tab::Logs,
+            Tab::Logs => self.tab = Tab::Graph,
+        }
+    }
 }

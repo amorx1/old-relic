@@ -1,25 +1,10 @@
-/* Flow
-    - Search for an application & select one OK
-    - Store that application OK
-        - appName OK
-        - entityGuid OK
-    - Select some time period OK
-    - Get Traces for selected application within the specified time period OK
-    - Get Trace data for found traces ...
-*/
-
+use crate::query::QueryResponse;
 use anyhow::anyhow;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, ClientBuilder, Method,
 };
-
-pub mod application;
-pub mod newrelic;
-pub mod timeseries;
 use serde::de::DeserializeOwned;
-
-use newrelic::QueryResponse;
 
 static QUERY_BASE: &str = r#"{ "query":  "{ actor { account(id: $account) { nrql(query: \"$query\") { results } } } }" }"#;
 
@@ -81,8 +66,6 @@ impl NewRelicClient {
         &self,
         query_str: impl AsRef<str>,
     ) -> Option<Vec<T>> {
-        // dbg!(&query_str);
-
         let response = self
             .client
             .clone()?
@@ -108,7 +91,6 @@ impl NewRelicClient {
                 .map_err(|e| anyhow!(e))
                 .expect("ERROR: Error in response deserialization schema");
 
-            // dbg!(&json);
             return Some(json.data.actor.account.nrql.results);
         }
 
