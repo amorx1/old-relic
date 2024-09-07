@@ -5,7 +5,7 @@ use ratatui::{
     symbols::Marker,
     widgets::{
         Axis, Block, BorderType, Borders, Chart, Clear, Dataset, GraphType, LegendPosition, List,
-        Padding, Paragraph, Tabs,
+        Padding, Paragraph, Tabs, Wrap,
     },
 };
 use style::palette::tailwind;
@@ -34,8 +34,13 @@ pub fn render_log_detail(app: &mut App, frame: &mut Frame, area: Rect) {
     let key_idx = app.logs.log_item_list_state.selected().unwrap();
     let log = &app.logs.selected().unwrap()[key_idx];
 
+    let paragraph = Paragraph::new(log.clone())
+        .wrap(Wrap { trim: true })
+        .block(Block::default().borders(Borders::ALL))
+        .style(Style::default());
+
     frame.render_widget(Clear, area);
-    frame.render_widget(log, area);
+    frame.render_widget(paragraph, area);
 }
 
 pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -43,7 +48,7 @@ pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
         .logs
         .logs
         .keys()
-        .map(|k| k.to_string())
+        .map(|k| k.to_owned())
         .collect::<Vec<String>>();
 
     let list = List::new(items)
@@ -66,7 +71,7 @@ pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
 
 pub fn render_log(app: &mut App, frame: &mut Frame, area: Rect) {
     let logs = app.logs.clone();
-    let lines = logs.selected().unwrap_or(&Vec::new()).to_owned();
+    let lines = logs.selected().unwrap_or(&vec![]).to_owned();
     let list = List::new(lines)
         .block(
             Block::default()

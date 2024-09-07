@@ -15,7 +15,7 @@ use rand::{thread_rng, Rng};
 use ratatui::{
     backend::Backend,
     layout::{Constraint, Layout},
-    style::{palette::tailwind::Palette, Color},
+    style::{palette::tailwind::Palette, Color, Style, Stylize},
     text::Line,
     widgets::ListState,
     Frame, Terminal,
@@ -140,13 +140,24 @@ impl App<'_> {
                                 Focus::Dashboard => self.set_focus(Focus::Default),
                                 _ => self.set_focus(Focus::Dashboard),
                             },
-                            KeyCode::Char('h') => self.previous_tab(),
-                            KeyCode::Char('l') => self.next_tab(),
-                            KeyCode::Char('L') => self.set_focus(Focus::Log),
+                            KeyCode::Char('T') => self.next_tab(),
                             KeyCode::Esc => self.set_focus(Focus::Default),
                             KeyCode::Enter => match self.focus {
                                 Focus::Log => self.set_focus(Focus::LogDetail),
-                                Focus::LogDetail => self.set_focus(Focus::Log),
+                                Focus::LogDetail => {
+                                    let key_idx = self.logs.log_item_list_state.selected().unwrap();
+                                    let log = &self.logs.selected().unwrap()[key_idx].to_string();
+                                    let correlation_id = log
+                                        .split(' ')
+                                        .last()
+                                        .unwrap()
+                                        .trim_matches(|p| char::is_ascii_punctuation(&p));
+                                    let query = format!("SELECT * FROM Log WHERE allColumnSearch('{}', insensitive: true)", correlation_id);
+
+                                    self.add_query(QueryType::Log(query));
+                                    self.set_focus(Focus::Default);
+                                }
+                                Focus::Default => self.set_focus(Focus::Log),
                                 _ => {}
                             },
                             _ => (),
@@ -186,7 +197,7 @@ impl App<'_> {
                                                 self.session.is_loaded = true;
                                             }
                                         }
-                                        // Update focus to home
+                                        // Update focus to default
                                         self.set_focus(Focus::Default);
                                     }
                                     Focus::SessionSave => {
@@ -218,10 +229,13 @@ impl App<'_> {
                             KeyCode::Right => {
                                 self.inputs.move_cursor_right(self.focus);
                             }
-                            KeyCode::Esc => {
-                                self.set_focus(Focus::Default);
-                                self.set_input_mode(InputMode::Normal);
-                            }
+                            KeyCode::Esc => match self.focus {
+                                Focus::SessionLoad | Focus::SessionSave => {}
+                                _ => {
+                                    self.set_focus(Focus::Default);
+                                    self.set_input_mode(InputMode::Normal);
+                                }
+                            },
                             _ => {}
                         },
                         _ => {}
@@ -268,7 +282,18 @@ impl App<'_> {
                             logs.insert(
                                 timestamp,
                                 log.split('\n')
-                                    .map(|v| Line::from(v.to_owned()))
+                                    .map(|v| {
+                                        if v.contains("CorrelationId") {
+                                            Line::from(v.to_owned()).style(
+                                                Style::default().bold().fg(Color::LightGreen),
+                                            )
+                                        } else if v.contains("level") && v.contains("Error") {
+                                            Line::from(v.to_owned())
+                                                .style(Style::default().bold().fg(Color::LightRed))
+                                        } else {
+                                            Line::from(v.to_owned())
+                                        }
+                                    })
                                     .collect::<Vec<Line>>(),
                             );
                         }
