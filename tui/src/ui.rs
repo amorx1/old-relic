@@ -61,7 +61,7 @@ pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
         .highlight_style(
             Style::new()
                 .add_modifier(Modifier::REVERSED)
-                .fg(app.theme.chart_fg),
+                .fg(app.config.theme.chart_fg),
         )
         .highlight_symbol(">>")
         .repeat_highlight_symbol(true);
@@ -82,7 +82,7 @@ pub fn render_log(app: &mut App, frame: &mut Frame, area: Rect) {
         .highlight_style(
             Style::new()
                 .add_modifier(Modifier::REVERSED)
-                .fg(app.theme.chart_fg),
+                .fg(app.config.theme.chart_fg),
         )
         .highlight_symbol(">>")
         .repeat_highlight_symbol(true);
@@ -138,7 +138,7 @@ pub fn render_load_session(app: &mut App, frame: &mut Frame, area: Rect) {
     let input = Paragraph::new(app.inputs.get(Focus::SessionLoad))
         .style(match app.input_mode {
             InputMode::Normal => Style::default(),
-            InputMode::Input => Style::default().fg(app.theme.focus_fg),
+            InputMode::Input => Style::default().fg(app.config.theme.focus_fg),
         })
         .block(
             Block::default()
@@ -160,7 +160,7 @@ pub fn render_save_session(app: &mut App, frame: &mut Frame, area: Rect) {
     let input = Paragraph::new(app.inputs.get(Focus::SessionSave))
         .style(match app.input_mode {
             InputMode::Normal => Style::default(),
-            InputMode::Input => Style::default().fg(app.theme.focus_fg),
+            InputMode::Input => Style::default().fg(app.config.theme.focus_fg),
         })
         .block(
             Block::default()
@@ -237,31 +237,31 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
             // Create the X axis and define its properties
             let x_axis = Axis::default()
                 .title("Time".red())
-                .style(Style::default().fg(app.theme.chart_fg))
+                .style(Style::default().fg(app.config.theme.chart_fg))
                 .bounds([min_x, Utc::now().timestamp() as f64])
                 .labels(vec![
                     DateTime::from_timestamp(min_x as i64, 0)
                         .unwrap()
                         .time()
                         .to_string()
-                        .fg(app.theme.chart_fg)
+                        .fg(app.config.theme.chart_fg)
                         .bold(),
                     DateTime::from_timestamp(Utc::now().timestamp(), 0)
                         .unwrap()
                         .to_string()
-                        .fg(app.theme.chart_fg)
+                        .fg(app.config.theme.chart_fg)
                         .bold(),
                 ]);
 
             // Create the Y axis and define its properties
             let y_axis = Axis::default()
-                .title(selection.clone().fg(app.theme.chart_fg))
-                .style(Style::default().fg(app.theme.chart_fg))
+                .title(selection.clone().fg(app.config.theme.chart_fg))
+                .style(Style::default().fg(app.config.theme.chart_fg))
                 .bounds([min_y, max_y])
                 .labels(vec![
-                    min_y.to_string().fg(app.theme.chart_fg).bold(),
-                    half_y.to_string().fg(app.theme.chart_fg).bold(),
-                    max_y.to_string().fg(app.theme.chart_fg).bold(),
+                    min_y.to_string().fg(app.config.theme.chart_fg).bold(),
+                    half_y.to_string().fg(app.config.theme.chart_fg).bold(),
+                    max_y.to_string().fg(app.config.theme.chart_fg).bold(),
                 ]);
 
             let legend_position = match &datasets.len() {
@@ -300,7 +300,7 @@ pub fn render_rename_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
     let prompt = Text::from("Rename query");
     let input = Paragraph::new(app.inputs.get(Focus::Rename))
         .style(match app.focus {
-            Focus::Rename => Style::default().fg(app.theme.focus_fg),
+            Focus::Rename => Style::default().fg(app.config.theme.focus_fg),
             _ => Style::default(),
         })
         .block(
@@ -333,7 +333,7 @@ pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
         .highlight_style(
             Style::new()
                 .add_modifier(Modifier::REVERSED)
-                .fg(app.theme.chart_fg),
+                .fg(app.config.theme.chart_fg),
         )
         .highlight_symbol(">>")
         .repeat_highlight_symbol(true);
@@ -344,7 +344,7 @@ pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
 pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
     let input = Paragraph::new(app.inputs.get(Focus::QueryInput))
         .style(match app.focus {
-            Focus::QueryInput => Style::default().fg(app.theme.focus_fg),
+            Focus::QueryInput => Style::default().fg(app.config.theme.focus_fg),
             _ => Style::default(),
         })
         .block(
@@ -390,32 +390,32 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
 
         // Create the X axis and define its properties
         let x_axis = Axis::default()
-            .title("Time".fg(app.theme.chart_fg))
-            .style(Style::default().fg(app.theme.chart_fg))
+            .title("Time".fg(app.config.theme.chart_fg))
+            .style(Style::default().fg(app.config.theme.chart_fg))
             .bounds([min_x, Utc::now().timestamp() as f64])
             .labels(vec![
                 DateTime::from_timestamp(min_x as i64, 0)
                     .unwrap()
                     .time()
                     .to_string()
-                    .fg(app.theme.chart_fg)
+                    .fg(app.config.theme.chart_fg)
                     .bold(),
                 DateTime::from_timestamp(Utc::now().timestamp(), 0)
                     .unwrap()
                     .to_string()
-                    .fg(app.theme.chart_fg)
+                    .fg(app.config.theme.chart_fg)
                     .bold(),
             ]);
 
         // Create the Y axis and define its properties
         let y_axis = Axis::default()
-            .title(selection.clone().fg(app.theme.chart_fg))
-            .style(Style::default().fg(app.theme.chart_fg))
+            .title(selection.clone().fg(app.config.theme.chart_fg))
+            .style(Style::default().fg(app.config.theme.chart_fg))
             .bounds([min_y, max_y])
             .labels(vec![
-                min_y.to_string().fg(app.theme.chart_fg).bold(),
-                half_y.to_string().fg(app.theme.chart_fg).bold(),
-                max_y.to_string().fg(app.theme.chart_fg).bold(),
+                min_y.to_string().fg(app.config.theme.chart_fg).bold(),
+                half_y.to_string().fg(app.config.theme.chart_fg).bold(),
+                max_y.to_string().fg(app.config.theme.chart_fg).bold(),
             ]);
 
         let legend_position = match &datasets.len() {
@@ -428,7 +428,7 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(app.theme.chart_fg))
+                    .border_style(Style::default().fg(app.config.theme.chart_fg))
                     .border_type(BorderType::Thick)
                     .border_type(BorderType::Rounded),
             )

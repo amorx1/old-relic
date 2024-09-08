@@ -8,6 +8,7 @@ use crate::{
         render_log_detail, render_log_list, render_query_box, render_query_list,
         render_rename_dialog, render_save_session, render_splash, render_tabs,
     },
+    Config,
 };
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
@@ -15,7 +16,7 @@ use rand::{thread_rng, Rng};
 use ratatui::{
     backend::Backend,
     layout::{Constraint, Layout},
-    style::{palette::tailwind::Palette, Color, Style, Stylize},
+    style::{Color, Style, Stylize},
     text::Line,
     widgets::ListState,
     Frame, Terminal,
@@ -24,7 +25,6 @@ use std::{
     collections::{btree_map::Entry, BTreeMap},
     fs::{self, OpenOptions},
     io::Write,
-    path::PathBuf,
     time::Duration,
 };
 use tokio::io;
@@ -51,12 +51,6 @@ pub struct Theme {
     pub chart_fg: Color,
 }
 
-pub struct Session {
-    pub is_loaded: bool,
-    pub queries: Option<BTreeMap<String, String>>,
-    pub session_path: Box<PathBuf>,
-}
-
 #[derive(Clone)]
 pub enum Tab {
     Graph = 0,
@@ -64,8 +58,7 @@ pub enum Tab {
 }
 
 pub struct App<'a> {
-    pub session: Session,
-    pub theme: Theme,
+    pub config: Box<Config>,
     pub inputs: Inputs,
     pub input_mode: InputMode,
     pub focus: Focus,
@@ -79,14 +72,10 @@ pub struct App<'a> {
 }
 
 impl App<'_> {
-    pub fn new(palette: &Palette, backend: AppBackend, session: Session) -> Self {
+    pub fn new(config: Box<Config>, backend: AppBackend) -> Self {
         Self {
             inputs: Inputs::new(),
-            session,
-            theme: Theme {
-                focus_fg: palette.c500,
-                chart_fg: palette.c900,
-            },
+            config,
             input_mode: InputMode::Normal,
             tab: Tab::Graph,
             focus: Focus::Default,
@@ -105,7 +94,7 @@ impl App<'_> {
             terminal.draw(|f| self.ui(f))?;
 
             // Session Load
-            if !self.session.is_loaded {
+            if !self.config.session.is_loaded {
                 self.focus = Focus::SessionLoad;
                 self.set_input_mode(InputMode::Input);
             }
@@ -194,7 +183,7 @@ impl App<'_> {
                                             }
                                             // Don't load session
                                             _ => {
-                                                self.session.is_loaded = true;
+                                                self.config.session.is_loaded = true;
                                             }
                                         }
                                         // Update focus to default
@@ -540,8 +529,8 @@ impl App<'_> {
     }
 
     pub fn load_session(&mut self) {
-        let session_path = self.session.session_path.clone();
-        let yaml = fs::read_to_string(*session_path).expect("ERROR: Could not read session file!");
+        let session_path = self.config.session.session_path.clone();
+        let yaml = fs::read_to_string(session_path).expect("ERROR: Could not read session file!");
         let session_queries: Option<BTreeMap<String, String>> =
             serde_yaml::from_str(&yaml).expect("ERROR: Could not deserialize session file!");
 
@@ -558,7 +547,7 @@ impl App<'_> {
             }
         }
 
-        self.session.is_loaded = true;
+        self.config.session.is_loaded = true;
     }
 
     pub fn save_session(&self) {
@@ -575,13 +564,13 @@ impl App<'_> {
 
         let yaml: String =
             serde_yaml::to_string(&output).expect("ERROR: Could not serialize queries!");
-        let session_path = self.session.session_path.clone();
+        let session_path = self.config.session.session_path.clone();
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
             .truncate(true)
             .create(true)
-            .open(*session_path)
+            .open(session_path)
             .expect("ERROR: Could not open file!");
         file.write_all(yaml.as_bytes())
             .expect("ERROR: Could not write to file!");

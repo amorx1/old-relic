@@ -1,17 +1,17 @@
 use crate::query::QueryResponse;
-use anyhow::anyhow;
+use anyhow::{anyhow, Error};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, ClientBuilder, Method,
 };
 use serde::de::DeserializeOwned;
 
-static QUERY_BASE: &str = r#"{ "query":  "{ actor { account(id: $account) { nrql(query: \"$query\") { results } } } }" }"#;
+const QUERY_BASE: &str = r#"{ "query":  "{ actor { account(id: $account) { nrql(query: \"$query\") { results } } } }" }"#;
 
 #[derive(Clone)]
 pub struct NewRelicClient {
-    url: Option<String>,
-    account: Option<i64>,
+    url: Option<&'static str>,
+    account: Option<String>,
     api_key: Option<String>,
     client: Option<Client>,
 }
@@ -27,16 +27,16 @@ impl NewRelicClient {
     }
 
     pub fn url(&mut self, url: &'static str) -> &mut Self {
-        self.url = Some(url.to_owned());
+        self.url = Some(url);
         self
     }
 
-    pub fn account(&mut self, account: &'static i64) -> &mut Self {
+    pub fn account(&mut self, account: &str) -> &mut Self {
         self.account = Some(account.to_owned());
         self
     }
 
-    pub fn api_key(&mut self, key: &'static str) -> &mut Self {
+    pub fn api_key(&mut self, key: &str) -> &mut Self {
         self.api_key = Some(key.to_owned());
         self
     }
@@ -49,12 +49,8 @@ impl NewRelicClient {
         );
         headers.append(
             "API-Key",
-            HeaderValue::from_str(
-                self.api_key
-                    .as_ref()
-                    .expect("ERROR: API Key must be provided first!"),
-            )
-            .unwrap(),
+            HeaderValue::from_str(self.api_key.as_ref().expect("ERROR: No API Key provided!"))
+                .unwrap(),
         );
 
         self.client = Some(client.default_headers(headers).build().unwrap());
@@ -65,22 +61,16 @@ impl NewRelicClient {
     pub async fn query<T: DeserializeOwned + std::fmt::Debug + Default>(
         &self,
         query_str: impl AsRef<str>,
-    ) -> Option<Vec<T>> {
+    ) -> Result<Vec<T>, Error> {
+        let request_body = QUERY_BASE
+            .replace("$account", self.account.as_ref().unwrap())
+            .replace("$query", query_str.as_ref());
         let response = self
             .client
-            .clone()?
-            .request(Method::POST, self.url.clone()?)
-            .body(
-                QUERY_BASE
-                    .replace(
-                        "$account",
-                        &self
-                            .account
-                            .expect("ERROR: No account number linked to client!")
-                            .to_string(),
-                    )
-                    .replace("$query", query_str.as_ref()),
-            )
+            .clone()
+            .unwrap()
+            .request(Method::POST, self.url.unwrap())
+            .body(request_body)
             .send()
             .await;
 
@@ -91,9 +81,9 @@ impl NewRelicClient {
                 .map_err(|e| anyhow!(e))
                 .expect("ERROR: Error in response deserialization schema");
 
-            return Some(json.data.actor.account.nrql.results);
+            return Ok(json.data.actor.account.nrql.results);
         }
 
-        None
+        Err(anyhow!("Query returned no results!"))
     }
 }
