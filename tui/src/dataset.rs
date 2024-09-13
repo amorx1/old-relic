@@ -1,6 +1,10 @@
-use std::collections::{btree_map::Entry, BTreeMap};
+use std::{
+    collections::{self, btree_map::Entry, BTreeMap},
+    string::{self, String},
+    vec::Vec,
+};
 
-use ratatui::{text::Line, widgets::ListState};
+use ratatui::{prelude::Line, widgets::ListState};
 
 use crate::backend::Bounds;
 
@@ -38,7 +42,7 @@ impl Logs<'_> {
         self.logs.get(&self.selected)
     }
 
-    pub fn iter(&self) -> std::collections::btree_map::Iter<'_, String, Vec<Line<'_>>> {
+    pub fn iter(&self) -> collections::btree_map::Iter<'_, String, Vec<Line<'_>>> {
         self.logs.iter()
     }
 
@@ -88,7 +92,7 @@ impl Datasets {
         removed
     }
 
-    pub fn iter(&self) -> std::collections::btree_map::Iter<'_, String, Dataset> {
+    pub fn iter(&self) -> collections::btree_map::Iter<'_, String, Dataset> {
         self.datasets.iter()
     }
 

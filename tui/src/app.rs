@@ -11,6 +11,8 @@ use crate::{
     Config,
 };
 
+use chrono::{Timelike, Utc};
+use crossbeam_channel::{Receiver as CrossBeamReceiver, Sender as CrossBeamSender};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use rand::{thread_rng, Rng};
 use ratatui::{
@@ -25,9 +27,27 @@ use std::{
     collections::{btree_map::Entry, BTreeMap},
     fs::{self, OpenOptions},
     io::Write,
+    sync::mpsc::Receiver,
     time::Duration,
 };
 use tokio::io;
+
+pub struct UIFocus {
+    pub tab: Tab,
+    pub panel: Focus,
+    pub input_mode: InputMode,
+}
+
+impl Default for UIFocus {
+    fn default() -> Self {
+        UIFocus {
+            // tab: Tab::Graph,
+            tab: Tab::Logs,
+            panel: Focus::Default,
+            input_mode: InputMode::Normal,
+        }
+    }
+}
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Focus {
@@ -41,6 +61,7 @@ pub enum Focus {
     LogDetail,
 }
 
+#[derive(Clone, Copy, PartialEq)]
 pub enum InputMode {
     Normal,
     Input,
@@ -51,7 +72,7 @@ pub struct Theme {
     pub chart_fg: Color,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Tab {
     Graph = 0,
     Logs = 1,
@@ -60,10 +81,10 @@ pub enum Tab {
 pub struct App<'a> {
     pub config: Box<Config>,
     pub inputs: Inputs,
-    pub input_mode: InputMode,
-    pub focus: Focus,
-    pub tab: Tab,
-    pub backend: AppBackend,
+    pub focus: UIFocus,
+    pub tabs: Vec<String>,
+    pub data_rx: Receiver<PayloadType>,
+    pub ui_tx: CrossBeamSender<UIEvent>,
     pub list_state: ListState,
     pub log_list_state: ListState,
     pub datasets: Datasets,
@@ -72,19 +93,23 @@ pub struct App<'a> {
 }
 
 impl App<'_> {
-    pub fn new(config: Box<Config>, backend: AppBackend) -> Self {
+    pub fn new(
+        config: Box<Config>,
+        data_rx: Receiver<PayloadType>,
+        ui_tx: CrossBeamSender<UIEvent>,
+    ) -> Self {
         Self {
             inputs: Inputs::new(),
             config,
-            input_mode: InputMode::Normal,
-            tab: Tab::Graph,
-            focus: Focus::Default,
-            backend,
+            data_rx,
+            ui_tx,
+            focus: UIFocus::default(),
             list_state: ListState::default(),
             log_list_state: ListState::default(),
             datasets: Datasets::new(),
             logs: Logs::default(),
             facet_colours: BTreeMap::default(),
+            tabs: vec!["Logs".into()],
         }
     }
 
@@ -95,44 +120,68 @@ impl App<'_> {
 
             // Session Load
             if !self.config.session.is_loaded {
-                self.focus = Focus::SessionLoad;
-                self.set_input_mode(InputMode::Input);
+                self.set_focus(UIFocus {
+                    panel: Focus::SessionLoad,
+                    input_mode: InputMode::Input,
+                    ..self.focus
+                });
             }
 
             // Event handlers
             if let Ok(true) = event::poll(Duration::from_millis(50)) {
                 if let Event::Key(key) = event::read()? {
-                    match self.input_mode {
+                    match self.focus.input_mode {
                         // Normal Mode
                         InputMode::Normal if key.kind == KeyEventKind::Press => match key.code {
                             KeyCode::Char('q') => {
-                                self.set_focus(Focus::SessionSave);
-                                self.set_input_mode(InputMode::Input);
+                                self.set_focus(UIFocus {
+                                    panel: Focus::SessionSave,
+                                    input_mode: InputMode::Input,
+                                    ..self.focus
+                                });
                             }
                             KeyCode::Char('e') => {
-                                self.set_focus(Focus::QueryInput);
-                                self.set_input_mode(InputMode::Input);
+                                self.set_focus(UIFocus {
+                                    panel: Focus::QueryInput,
+                                    input_mode: InputMode::Input,
+                                    ..self.focus
+                                });
                             }
                             KeyCode::Char('j') => self.next(),
                             KeyCode::Char('k') => self.previous(),
                             KeyCode::Char('x') => self.delete_query(),
-                            KeyCode::Char('r') => match self.focus {
+                            KeyCode::Char('r') => match self.focus.panel {
                                 Focus::QueryInput => {}
                                 _ => {
                                     if !self.datasets.is_empty() {
-                                        self.set_focus(Focus::Rename);
-                                        self.set_input_mode(InputMode::Input);
+                                        self.set_focus(UIFocus {
+                                            panel: Focus::Rename,
+                                            input_mode: InputMode::Input,
+                                            ..self.focus
+                                        });
                                     }
                                 }
                             },
-                            KeyCode::Char('d') => match self.focus {
-                                Focus::Dashboard => self.set_focus(Focus::Default),
-                                _ => self.set_focus(Focus::Dashboard),
+                            KeyCode::Char('d') => match self.focus.panel {
+                                Focus::Dashboard => self.set_focus(UIFocus {
+                                    panel: Focus::Default,
+                                    ..self.focus
+                                }),
+                                _ => self.set_focus(UIFocus {
+                                    panel: Focus::Dashboard,
+                                    ..self.focus
+                                }),
                             },
                             KeyCode::Char('T') => self.next_tab(),
-                            KeyCode::Esc => self.set_focus(Focus::Default),
-                            KeyCode::Enter => match self.focus {
-                                Focus::Log => self.set_focus(Focus::LogDetail),
+                            KeyCode::Esc => self.set_focus(UIFocus {
+                                panel: Focus::Default,
+                                ..self.focus
+                            }),
+                            KeyCode::Enter => match self.focus.panel {
+                                Focus::Log => self.set_focus(UIFocus {
+                                    panel: Focus::LogDetail,
+                                    ..self.focus
+                                }),
                                 Focus::LogDetail => {
                                     let key_idx = self.logs.log_item_list_state.selected().unwrap();
                                     let log = &self.logs.selected().unwrap()[key_idx].to_string();
@@ -143,10 +192,16 @@ impl App<'_> {
                                         .trim_matches(|p| char::is_ascii_punctuation(&p));
                                     let query = format!("SELECT * FROM Log WHERE allColumnSearch('{}', insensitive: true)", correlation_id);
 
-                                    self.add_query(QueryType::Log(query));
-                                    self.set_focus(Focus::Default);
+                                    self.add_query(query);
+                                    self.set_focus(UIFocus {
+                                        panel: Focus::Default,
+                                        ..self.focus
+                                    });
                                 }
-                                Focus::Default => self.set_focus(Focus::Log),
+                                Focus::Default => self.set_focus(UIFocus {
+                                    panel: Focus::Log,
+                                    ..self.focus
+                                }),
                                 _ => {}
                             },
                             _ => (),
@@ -155,19 +210,12 @@ impl App<'_> {
                         // Input Mode
                         InputMode::Input if key.kind == KeyEventKind::Press => match key.code {
                             KeyCode::Enter => {
-                                match self.focus {
+                                match self.focus.panel {
                                     Focus::QueryInput => {
                                         let raw_query = self.inputs.get(Focus::QueryInput);
-                                        raw_query.to_nrql().map_or_else(
-                                            |_| {
-                                                self.add_query(QueryType::Log(
-                                                    raw_query.to_owned(),
-                                                ));
-                                            },
-                                            |v| self.add_query(QueryType::Timeseries(v)),
-                                        );
+                                        self.add_query(raw_query.to_owned());
                                         self.logs.state = LogState::Loading;
-                                        self.inputs.clear(Focus::QueryInput);
+                                        // self.inputs.clear(Focus::QueryInput);
                                     }
                                     Focus::Rename => {
                                         self.rename_query(
@@ -187,7 +235,10 @@ impl App<'_> {
                                             }
                                         }
                                         // Update focus to default
-                                        self.set_focus(Focus::Default);
+                                        self.set_focus(UIFocus {
+                                            panel: Focus::Default,
+                                            ..self.focus
+                                        });
                                     }
                                     Focus::SessionSave => {
                                         match self.inputs.get(Focus::SessionSave) {
@@ -201,28 +252,34 @@ impl App<'_> {
                                     }
                                     _ => {}
                                 };
-                                self.inputs.clear(self.focus);
-                                self.inputs.reset_cursor(self.focus);
-                                self.set_focus(Focus::Default);
-                                self.set_input_mode(InputMode::Normal);
+                                self.inputs.clear(self.focus.panel);
+                                self.inputs.reset_cursor(self.focus.panel);
+                                self.set_focus(UIFocus {
+                                    panel: Focus::Default,
+                                    input_mode: InputMode::Normal,
+                                    ..self.focus
+                                });
                             }
                             KeyCode::Char(to_insert) => {
-                                self.inputs.enter_char(self.focus, to_insert);
+                                self.inputs.enter_char(self.focus.panel, to_insert);
                             }
                             KeyCode::Backspace => {
-                                self.inputs.delete_char(self.focus);
+                                self.inputs.delete_char(self.focus.panel);
                             }
                             KeyCode::Left => {
-                                self.inputs.move_cursor_left(self.focus);
+                                self.inputs.move_cursor_left(self.focus.panel);
                             }
                             KeyCode::Right => {
-                                self.inputs.move_cursor_right(self.focus);
+                                self.inputs.move_cursor_right(self.focus.panel);
                             }
-                            KeyCode::Esc => match self.focus {
+                            KeyCode::Esc => match self.focus.panel {
                                 Focus::SessionLoad | Focus::SessionSave => {}
                                 _ => {
-                                    self.set_focus(Focus::Default);
-                                    self.set_input_mode(InputMode::Normal);
+                                    self.set_focus(UIFocus {
+                                        panel: Focus::Default,
+                                        input_mode: InputMode::Normal,
+                                        ..self.focus
+                                    });
                                 }
                             },
                             _ => {}
@@ -232,7 +289,7 @@ impl App<'_> {
                 }
             }
 
-            while let Some(payload) = self.backend.data_rx.try_iter().next() {
+            while let Some(payload) = self.data_rx.try_iter().next() {
                 match payload {
                     PayloadType::Timeseries(payload) => {
                         if let Entry::Vacant(e) = self.datasets.entry(payload.query.clone()) {
@@ -306,7 +363,7 @@ impl App<'_> {
 
         render_tabs(self, frame, header_area);
 
-        match self.tab {
+        match self.focus.tab {
             Tab::Graph => {
                 let horizontal =
                     Layout::horizontal([Constraint::Percentage(15), Constraint::Min(20)]);
@@ -314,7 +371,7 @@ impl App<'_> {
                 let [input_area, rest] = vertical.areas(area);
                 let [list_area, graph_area] = horizontal.areas(rest);
 
-                match self.focus {
+                match self.focus.panel {
                     Focus::SessionSave => render_save_session(self, frame, area),
                     Focus::SessionLoad => render_load_session(self, frame, area),
                     Focus::Dashboard => render_dashboard(self, frame, area),
@@ -345,7 +402,7 @@ impl App<'_> {
                 let [input_area, rest] = vertical.areas(area);
                 let [list_area, log_area] = horizontal.areas(rest);
 
-                match self.focus {
+                match self.focus.panel {
                     Focus::SessionSave => render_save_session(self, frame, area),
                     Focus::Default | Focus::QueryInput | Focus::Log | Focus::LogDetail => {
                         render_query_box(self, frame, input_area);
@@ -353,7 +410,7 @@ impl App<'_> {
                         match self.logs.state {
                             LogState::Show => {
                                 render_log(self, frame, log_area);
-                                if self.focus == Focus::LogDetail {
+                                if self.focus.panel == Focus::LogDetail {
                                     render_log_detail(self, frame, log_area);
                                 }
                             }
@@ -383,16 +440,19 @@ impl App<'_> {
         }
     }
 
-    fn add_query(&self, query: QueryType) {
-        self.backend.add_query(query);
+    fn add_query(&self, query: String) {
+        _ = self.ui_tx.send(UIEvent::AddQuery(query));
     }
 
-    pub fn set_focus(&mut self, focus: Focus) {
-        self.focus = focus
+    pub fn set_focus(&mut self, focus: UIFocus) {
+        self.focus = focus;
     }
 
     pub fn set_input_mode(&mut self, mode: InputMode) {
-        self.input_mode = mode;
+        self.focus = UIFocus {
+            input_mode: mode,
+            ..self.focus
+        };
     }
 
     pub fn delete_query(&mut self) {
@@ -400,11 +460,11 @@ impl App<'_> {
 
         let removed = self.datasets.remove_entry(i);
         // TODO: Fix deleted queries reappearing on new data!
-        _ = self.backend.ui_tx.send(UIEvent::DeleteQuery(removed));
+        _ = self.ui_tx.send(UIEvent::DeleteQuery(removed));
     }
 
     pub fn next(&mut self) {
-        match self.tab {
+        match self.focus.tab {
             Tab::Graph => {
                 if self.datasets.is_empty() {
                     return;
@@ -424,7 +484,7 @@ impl App<'_> {
                 self.list_state.select(Some(i));
                 self.datasets.select(i);
             }
-            Tab::Logs => match self.focus {
+            Tab::Logs => match self.focus.panel {
                 Focus::Log => {
                     if self.logs.logs.is_empty() {
                         return;
@@ -468,7 +528,7 @@ impl App<'_> {
     }
 
     pub fn previous(&mut self) {
-        match self.tab {
+        match self.focus.tab {
             Tab::Graph => {
                 if self.datasets.is_empty() {
                     return;
@@ -487,7 +547,7 @@ impl App<'_> {
                 self.list_state.select(Some(i));
                 self.datasets.select(i);
             }
-            Tab::Logs => match self.focus {
+            Tab::Logs => match self.focus.panel {
                 Focus::Log => {
                     if self.logs.logs.is_empty() {
                         return;
@@ -541,7 +601,7 @@ impl App<'_> {
                 let clean_query = query.replace("as value", "");
                 if let Ok(parsed_query) = clean_query.trim().to_nrql() {
                     // TODO: Handle Log session
-                    self.add_query(QueryType::Timeseries(parsed_query.clone()));
+                    self.add_query(query);
                     self.rename_query(parsed_query.to_string().unwrap(), alias);
                 }
             }
@@ -577,17 +637,19 @@ impl App<'_> {
     }
 
     fn previous_tab(&mut self) {
-        match self.tab {
-            Tab::Graph => self.tab = Tab::Logs,
-            Tab::Logs => self.tab = Tab::Graph,
+        match self.focus.tab {
+            // Tab::Graph => self.focus.tab = Tab::Logs,
+            Tab::Graph => {}
+            Tab::Logs => self.focus.tab = Tab::Graph,
         }
     }
 
     fn next_tab(&mut self) {
         // TODO: Handle n tabs
-        match self.tab {
-            Tab::Graph => self.tab = Tab::Logs,
-            Tab::Logs => self.tab = Tab::Graph,
+        match self.focus.tab {
+            // Tab::Graph => self.focus.tab = Tab::Logs,
+            Tab::Graph => {}
+            Tab::Logs => self.focus.tab = Tab::Graph,
         }
     }
 }

@@ -1,3 +1,4 @@
+use crate::dataset::LogState;
 use chrono::{DateTime, Utc};
 
 use ratatui::{
@@ -13,7 +14,7 @@ use throbber_widgets_tui::WhichUse;
 use tui_big_text::{BigText, PixelSize};
 
 use crate::{
-    app::{Focus, InputMode},
+    app::{Focus, InputMode, Tab},
     App,
 };
 
@@ -28,7 +29,71 @@ pub const PALETTES: [tailwind::Palette; 9] = [
     tailwind::FUCHSIA,
     tailwind::SKY,
 ];
+pub fn ui(app: &mut App, frame: &mut Frame) {
+    let area = frame.area();
+    let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]);
+    let [header_area, area] = vertical.areas(area);
 
+    render_tabs(app, frame, header_area);
+
+    match app.focus.tab {
+        Tab::Graph => {
+            let horizontal = Layout::horizontal([Constraint::Percentage(15), Constraint::Min(20)]);
+            let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(20)]);
+            let [input_area, rest] = vertical.areas(area);
+            let [list_area, graph_area] = horizontal.areas(rest);
+
+            match app.focus.panel {
+                Focus::SessionSave => render_save_session(app, frame, area),
+                Focus::SessionLoad => render_load_session(app, frame, area),
+                Focus::Dashboard => render_dashboard(app, frame, area),
+                Focus::Rename => {
+                    render_query_box(app, frame, input_area);
+                    render_query_list(app, frame, list_area);
+                    render_rename_dialog(app, frame, graph_area);
+                }
+                Focus::Default | Focus::QueryInput | Focus::Log | Focus::LogDetail => {
+                    render_query_box(app, frame, input_area);
+                    render_query_list(app, frame, list_area);
+                    if let Some(dataset) = app.datasets.selected() {
+                        if dataset.has_data {
+                            render_graph(app, frame, graph_area);
+                        } else {
+                            render_loading(app, frame, graph_area);
+                        }
+                    } else {
+                        render_splash(app, frame, graph_area);
+                    }
+                }
+            }
+        }
+        Tab::Logs => {
+            let horizontal = Layout::horizontal([Constraint::Percentage(15), Constraint::Min(20)]);
+            let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(20)]);
+            let [input_area, rest] = vertical.areas(area);
+            let [list_area, log_area] = horizontal.areas(rest);
+
+            match app.focus.panel {
+                Focus::SessionSave => render_save_session(app, frame, area),
+                Focus::Default | Focus::QueryInput | Focus::Log | Focus::LogDetail => {
+                    render_query_box(app, frame, input_area);
+                    render_log_list(app, frame, list_area);
+                    match app.logs.state {
+                        LogState::Show => {
+                            render_log(app, frame, log_area);
+                            if app.focus.panel == Focus::LogDetail {
+                                render_log_detail(app, frame, log_area);
+                            }
+                        }
+                        LogState::None => render_splash(app, frame, log_area),
+                        LogState::Loading => render_loading(app, frame, log_area),
+                    }
+                }
+                _ => render_splash(app, frame, area),
+            }
+        }
+    }
+}
 pub fn render_log_detail(app: &mut App, frame: &mut Frame, area: Rect) {
     let area = centered_rect(60, 20, area);
     let key_idx = app.logs.log_item_list_state.selected().unwrap();
@@ -91,10 +156,10 @@ pub fn render_log(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_tabs(app: &mut App, frame: &mut Frame, area: Rect) {
-    let titles = vec![Line::from("Graph"), Line::from("Logs")].into_iter();
+    let titles = app.tabs.clone();
     let tabs = Tabs::new(titles)
         .highlight_style(Style::default().fg(Color::Green).bold())
-        .select(app.tab.clone() as usize)
+        .select(app.focus.tab as usize)
         .padding("", "")
         .divider(" | ")
         .block(
@@ -136,7 +201,7 @@ pub fn render_load_session(app: &mut App, frame: &mut Frame, area: Rect) {
     let prompt =
         Text::from("A previous session was found. Would you like to reload its queries? y/n");
     let input = Paragraph::new(app.inputs.get(Focus::SessionLoad))
-        .style(match app.input_mode {
+        .style(match app.focus.input_mode {
             InputMode::Normal => Style::default(),
             InputMode::Input => Style::default().fg(app.config.theme.focus_fg),
         })
@@ -158,7 +223,7 @@ pub fn render_save_session(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let prompt = Text::from("Save session? y/n");
     let input = Paragraph::new(app.inputs.get(Focus::SessionSave))
-        .style(match app.input_mode {
+        .style(match app.focus.input_mode {
             InputMode::Normal => Style::default(),
             InputMode::Input => Style::default().fg(app.config.theme.focus_fg),
         })
@@ -299,7 +364,7 @@ pub fn render_rename_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let prompt = Text::from("Rename query");
     let input = Paragraph::new(app.inputs.get(Focus::Rename))
-        .style(match app.focus {
+        .style(match app.focus.panel {
             Focus::Rename => Style::default().fg(app.config.theme.focus_fg),
             _ => Style::default(),
         })
@@ -343,7 +408,7 @@ pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
 
 pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
     let input = Paragraph::new(app.inputs.get(Focus::QueryInput))
-        .style(match app.focus {
+        .style(match app.focus.panel {
             Focus::QueryInput => Style::default().fg(app.config.theme.focus_fg),
             _ => Style::default(),
         })

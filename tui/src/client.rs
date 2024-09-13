@@ -78,8 +78,7 @@ impl NewRelicClient {
             let json = data
                 .json::<QueryResponse<T>>()
                 .await
-                .map_err(|e| anyhow!(e))
-                .expect("ERROR: Error in response deserialization schema");
+                .map_err(|e| anyhow!(e))?;
 
             return Ok(json.data.actor.account.nrql.results);
         }
