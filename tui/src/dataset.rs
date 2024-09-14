@@ -1,12 +1,15 @@
 use std::{
     collections::{self, btree_map::Entry, BTreeMap},
-    string::{self, String},
+    string::String,
     vec::Vec,
 };
 
-use ratatui::{prelude::Line, widgets::ListState};
+use ratatui::{
+    prelude::Line,
+    widgets::{self, ListState},
+};
 
-use crate::backend::Bounds;
+use crate::backend::{Bounds, ChartData};
 
 pub struct Dataset {
     pub has_data: bool,
@@ -31,8 +34,10 @@ pub enum LogState {
 
 #[derive(Default, Clone)]
 pub struct Logs<'a> {
-    pub state: LogState,
+    // pub state: LogState,
     pub logs: BTreeMap<String, Vec<Line<'a>>>,
+    pub chart_data: ChartData,
+    pub bounds: Bounds,
     pub log_item_list_state: ListState,
     pub selected: String,
 }

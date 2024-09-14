@@ -10,7 +10,7 @@ mod ui;
 
 use anyhow::Error;
 use app::{App, Theme};
-use backend::{query_log, query_timeseries, LogPayload, PayloadType, UIEvent};
+use backend::{query_log, query_timeseries, PayloadType, UIEvent};
 use client::NewRelicClient;
 use crossbeam_channel::{unbounded, Receiver as CrossBeamReceiver, Sender as CrossBeamSender};
 use crossterm::{
@@ -26,7 +26,7 @@ use tokio_stream::{wrappers::IntervalStream, StreamExt};
 use ui::PALETTES;
 
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::HashSet,
     env,
     io::{self, stdout},
     path::PathBuf,
@@ -151,12 +151,6 @@ async fn listen(
                             PayloadType::Log(query_log(x, client.clone()).await.unwrap())
                         }
                     };
-
-                    // Mock data
-                    // let data = PayloadType::Log(LogPayload {
-                    //     logs: BTreeMap::from([("Testing".to_string(), "".to_string())]),
-                    // });
-
                     data_tx.send(data)?
                 }
                 UIEvent::DeleteQuery(query) => {

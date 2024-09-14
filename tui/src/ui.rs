@@ -1,12 +1,13 @@
 use crate::dataset::LogState;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 
 use ratatui::{
     prelude::*,
     symbols::Marker,
     widgets::{
-        Axis, Block, BorderType, Borders, Chart, Clear, Dataset, GraphType, LegendPosition, List,
-        Padding, Paragraph, Tabs, Wrap,
+        Axis, Bar, BarChart, BarGroup, Block, BorderType, Borders, Chart, Clear, Dataset,
+        GraphType, LegendPosition, List, Padding, Paragraph, RenderDirection, Sparkline, Tabs,
+        Wrap,
     },
 };
 use style::palette::tailwind;
@@ -29,6 +30,7 @@ pub const PALETTES: [tailwind::Palette; 9] = [
     tailwind::FUCHSIA,
     tailwind::SKY,
 ];
+
 pub fn ui(app: &mut App, frame: &mut Frame) {
     let area = frame.area();
     let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]);
@@ -71,29 +73,172 @@ pub fn ui(app: &mut App, frame: &mut Frame) {
             let horizontal = Layout::horizontal([Constraint::Percentage(15), Constraint::Min(20)]);
             let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(20)]);
             let [input_area, rest] = vertical.areas(area);
-            let [list_area, log_area] = horizontal.areas(rest);
+            let [list_area, rest] = horizontal.areas(rest);
+
+            let [barchart_area, log_area] =
+                Layout::vertical([Constraint::Max(10), Constraint::Min(30)]).areas(rest);
 
             match app.focus.panel {
                 Focus::SessionSave => render_save_session(app, frame, area),
                 Focus::Default | Focus::QueryInput | Focus::Log | Focus::LogDetail => {
                     render_query_box(app, frame, input_area);
-                    render_log_list(app, frame, list_area);
-                    match app.logs.state {
-                        LogState::Show => {
-                            render_log(app, frame, log_area);
-                            if app.focus.panel == Focus::LogDetail {
-                                render_log_detail(app, frame, log_area);
-                            }
+                    if !app.logs.is_empty() {
+                        render_log_list(app, frame, list_area);
+                        render_barchart(app, frame, barchart_area);
+                        render_log(app, frame, log_area);
+                        if app.focus.panel == Focus::LogDetail {
+                            render_log_detail(app, frame, log_area);
                         }
-                        LogState::None => render_splash(app, frame, log_area),
-                        LogState::Loading => render_loading(app, frame, log_area),
+                    } else if app.focus.loading {
+                        render_loading(app, frame, log_area)
+                    } else {
+                        render_splash(app, frame, log_area);
                     }
+                    // match app.logs.state {
+                    //     LogState::Show => {}
+                    //     LogState::None => ,
+                    //     LogState::Loading => render_loading(app, frame, log_area),
+                    // }
                 }
                 _ => render_splash(app, frame, area),
             }
         }
     }
 }
+
+// Creates a Line for a log detail with styling based on content
+pub fn map_detail_line<'a>(value: String) -> Line<'a> {
+    if value.contains("CorrelationId") || value.contains("requestId") {
+        Line::from(value).style(Style::default().bold().fg(Color::LightGreen))
+    } else if value.contains("level") && value.contains("Error") {
+        Line::from(value).style(Style::default().bold().fg(Color::LightRed))
+    } else {
+        Line::from(value)
+    }
+}
+
+pub fn render_barchart(app: &mut App, frame: &mut Frame, area: Rect) {
+    // // let bars: Vec<Bar> = ["1", "2"]
+    // //     .iter()
+    // //     .map(|i| {
+    // //         Bar::default()
+    // //             .value(i.parse::<u64>().unwrap())
+    // //             .text_value("".into())
+    // //             .label(Line::from(i.to_owned()))
+    // //     })
+    // //     .collect();
+
+    // let bars: Vec<Bar> = app
+    //     .logs
+    //     .logs
+    //     .keys()
+    //     .map(|timestamp| {
+    //         Bar::default()
+    //             .value(1)
+    //             .text_value("".into())
+    //             .label(Line::from(timestamp.to_owned()))
+    //     })
+    //     .collect();
+    // let barchart = BarChart::default()
+    //     .data(BarGroup::default().bars(&bars))
+    //     .block(
+    //         Block::default()
+    //             .borders(Borders::ALL)
+    //             .border_type(BorderType::Rounded),
+    //     )
+    //     .style(Style::default());
+
+    // let sparkline = Sparkline::default()
+    //     .block(Block::bordered().title("Sparkline"))
+    //     .data(&[0, 0, 0, 0, 1, 0, 0])
+    //     .max(5)
+    //     .direction(RenderDirection::LeftToRight)
+    //     .style(Style::default().red());
+
+    // let dataset1 = Dataset::default()
+    //     .data(&app.logs.chart_data)
+    //     .marker(Marker::Block)
+    //     .style(Style::default().blue())
+    //     .graph_type(GraphType::Bar);
+
+    // let data2 = &app
+    //     .logs
+    //     .chart_data
+    //     .iter()
+    //     .map(|(x, y)| (x.to_owned(), 2_f64))
+    //     .collect::<Vec<(f64, f64)>>();
+
+    // let dataset2 = Dataset::default()
+    //     .data(data2)
+    //     .marker(Marker::Block)
+    //     .style(Style::default().red())
+    //     .graph_type(GraphType::Bar);
+
+    let error_dataset = Dataset::default()
+        .data(&app.logs.chart_data.error)
+        .marker(Marker::Block)
+        .style(Style::default().red())
+        .graph_type(GraphType::Bar);
+    let debug_dataset = Dataset::default()
+        .data(&app.logs.chart_data.debug)
+        .marker(Marker::Block)
+        .style(Style::default().green())
+        .graph_type(GraphType::Bar);
+    let info_dataset = Dataset::default()
+        .data(&app.logs.chart_data.info)
+        .marker(Marker::Block)
+        .style(Style::default().blue())
+        .graph_type(GraphType::Bar);
+
+    let bounds = app.logs.bounds;
+    let (min_x, _) = bounds.mins;
+    let (max_x, _) = bounds.maxes;
+
+    let min_x_date_time = DateTime::<Utc>::from_utc(
+        NaiveDateTime::from_timestamp_opt(min_x as i64 / 1000, 483).unwrap(),
+        Utc,
+    );
+    let max_x_date_time = DateTime::<Utc>::from_utc(
+        NaiveDateTime::from_timestamp_opt(max_x as i64 / 1000, 483).unwrap(),
+        Utc,
+    );
+
+    // Create the X axis and define its properties
+    let x_axis = Axis::default()
+        .style(Style::default().white())
+        .labels([
+            format!(
+                "{} {}",
+                min_x_date_time.date_naive(),
+                min_x_date_time.time()
+            ),
+            format!(
+                "{} {}",
+                max_x_date_time.date_naive(),
+                max_x_date_time.time()
+            ),
+        ])
+        .labels_alignment(Alignment::Right)
+        .bounds([min_x, max_x]);
+
+    // Create the Y axis and define its properties
+    let y_axis = Axis::default()
+        .style(Style::default().white())
+        .bounds([0.0, 5.0]);
+
+    // Create the chart and link all the parts together
+    let chart = Chart::new(vec![info_dataset, debug_dataset, error_dataset])
+        .block(
+            Block::new()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .x_axis(x_axis)
+        .y_axis(y_axis);
+
+    frame.render_widget(chart, area);
+}
+
 pub fn render_log_detail(app: &mut App, frame: &mut Frame, area: Rect) {
     let area = centered_rect(60, 20, area);
     let key_idx = app.logs.log_item_list_state.selected().unwrap();
@@ -101,7 +246,11 @@ pub fn render_log_detail(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let paragraph = Paragraph::new(log.clone())
         .wrap(Wrap { trim: true })
-        .block(Block::default().borders(Borders::ALL))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
         .style(Style::default());
 
     frame.render_widget(Clear, area);
@@ -416,7 +565,7 @@ pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .title("Enter query: "),
+                .title("Query"),
         );
     frame.render_widget(input, area);
 }

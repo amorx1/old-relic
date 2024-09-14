@@ -1,13 +1,9 @@
 use crate::{
-    backend::{Backend as AppBackend, Bounds, PayloadType, UIEvent},
+    backend::{Bounds, PayloadType, UIEvent},
     dataset::{Dataset, Datasets, LogState, Logs},
     input::Inputs,
-    query::{QueryType, NRQL},
-    ui::{
-        render_dashboard, render_graph, render_load_session, render_loading, render_log,
-        render_log_detail, render_log_list, render_query_box, render_query_list,
-        render_rename_dialog, render_save_session, render_splash, render_tabs,
-    },
+    query::NRQL,
+    ui::{map_detail_line, ui},
     Config,
 };
 
@@ -17,11 +13,10 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use rand::{thread_rng, Rng};
 use ratatui::{
     backend::Backend,
-    layout::{Constraint, Layout},
-    style::{Color, Style, Stylize},
+    style::Color,
     text::Line,
-    widgets::ListState,
-    Frame, Terminal,
+    widgets::{self, GraphType, ListState},
+    Terminal,
 };
 use std::{
     collections::{btree_map::Entry, BTreeMap},
@@ -36,6 +31,7 @@ pub struct UIFocus {
     pub tab: Tab,
     pub panel: Focus,
     pub input_mode: InputMode,
+    pub loading: bool,
 }
 
 impl Default for UIFocus {
@@ -45,6 +41,7 @@ impl Default for UIFocus {
             tab: Tab::Logs,
             panel: Focus::Default,
             input_mode: InputMode::Normal,
+            loading: false,
         }
     }
 }
@@ -116,7 +113,7 @@ impl App<'_> {
     pub fn run<B: Backend>(mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
         let mut rng = thread_rng();
         loop {
-            terminal.draw(|f| self.ui(f))?;
+            terminal.draw(|f| ui(&mut self, f))?;
 
             // Session Load
             if !self.config.session.is_loaded {
@@ -214,7 +211,11 @@ impl App<'_> {
                                     Focus::QueryInput => {
                                         let raw_query = self.inputs.get(Focus::QueryInput);
                                         self.add_query(raw_query.to_owned());
-                                        self.logs.state = LogState::Loading;
+                                        self.set_focus(UIFocus {
+                                            loading: true,
+                                            ..self.focus
+                                        });
+                                        // self.logs.state = LogState::Loading;
                                         // self.inputs.clear(Focus::QueryInput);
                                     }
                                     Focus::Rename => {
@@ -328,97 +329,25 @@ impl App<'_> {
                             logs.insert(
                                 timestamp,
                                 log.split('\n')
-                                    .map(|v| {
-                                        if v.contains("CorrelationId") {
-                                            Line::from(v.to_owned()).style(
-                                                Style::default().bold().fg(Color::LightGreen),
-                                            )
-                                        } else if v.contains("level") && v.contains("Error") {
-                                            Line::from(v.to_owned())
-                                                .style(Style::default().bold().fg(Color::LightRed))
-                                        } else {
-                                            Line::from(v.to_owned())
-                                        }
-                                    })
+                                    .map(|v| map_detail_line(v.into()))
                                     .collect::<Vec<Line>>(),
                             );
                         }
 
                         self.logs = Logs {
-                            state: LogState::Show,
+                            // state: LogState::Show,
                             logs,
                             log_item_list_state: ListState::default(),
                             selected: String::new(),
+                            chart_data: payload.chart_data,
+                            bounds: payload.bounds,
                         };
+
+                        self.set_focus(UIFocus {
+                            loading: false,
+                            ..self.focus
+                        });
                     }
-                }
-            }
-        }
-    }
-
-    pub fn ui(&mut self, frame: &mut Frame) {
-        let area = frame.area();
-        let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]);
-        let [header_area, area] = vertical.areas(area);
-
-        render_tabs(self, frame, header_area);
-
-        match self.focus.tab {
-            Tab::Graph => {
-                let horizontal =
-                    Layout::horizontal([Constraint::Percentage(15), Constraint::Min(20)]);
-                let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(20)]);
-                let [input_area, rest] = vertical.areas(area);
-                let [list_area, graph_area] = horizontal.areas(rest);
-
-                match self.focus.panel {
-                    Focus::SessionSave => render_save_session(self, frame, area),
-                    Focus::SessionLoad => render_load_session(self, frame, area),
-                    Focus::Dashboard => render_dashboard(self, frame, area),
-                    Focus::Rename => {
-                        render_query_box(self, frame, input_area);
-                        render_query_list(self, frame, list_area);
-                        render_rename_dialog(self, frame, graph_area);
-                    }
-                    Focus::Default | Focus::QueryInput | Focus::Log | Focus::LogDetail => {
-                        render_query_box(self, frame, input_area);
-                        render_query_list(self, frame, list_area);
-                        if let Some(dataset) = self.datasets.selected() {
-                            if dataset.has_data {
-                                render_graph(self, frame, graph_area);
-                            } else {
-                                render_loading(self, frame, graph_area);
-                            }
-                        } else {
-                            render_splash(self, frame, graph_area);
-                        }
-                    }
-                }
-            }
-            Tab::Logs => {
-                let horizontal =
-                    Layout::horizontal([Constraint::Percentage(15), Constraint::Min(20)]);
-                let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(20)]);
-                let [input_area, rest] = vertical.areas(area);
-                let [list_area, log_area] = horizontal.areas(rest);
-
-                match self.focus.panel {
-                    Focus::SessionSave => render_save_session(self, frame, area),
-                    Focus::Default | Focus::QueryInput | Focus::Log | Focus::LogDetail => {
-                        render_query_box(self, frame, input_area);
-                        render_log_list(self, frame, list_area);
-                        match self.logs.state {
-                            LogState::Show => {
-                                render_log(self, frame, log_area);
-                                if self.focus.panel == Focus::LogDetail {
-                                    render_log_detail(self, frame, log_area);
-                                }
-                            }
-                            LogState::None => render_splash(self, frame, log_area),
-                            LogState::Loading => render_loading(self, frame, log_area),
-                        }
-                    }
-                    _ => render_splash(self, frame, area),
                 }
             }
         }
@@ -446,13 +375,6 @@ impl App<'_> {
 
     pub fn set_focus(&mut self, focus: UIFocus) {
         self.focus = focus;
-    }
-
-    pub fn set_input_mode(&mut self, mode: InputMode) {
-        self.focus = UIFocus {
-            input_mode: mode,
-            ..self.focus
-        };
     }
 
     pub fn delete_query(&mut self) {
@@ -631,25 +553,25 @@ impl App<'_> {
             .truncate(true)
             .create(true)
             .open(session_path)
-            .expect("ERROR: Could not open file!");
+            .expect("ERROR: Could not open session file!");
         file.write_all(yaml.as_bytes())
-            .expect("ERROR: Could not write to file!");
+            .expect("ERROR: Could not write to session file!");
     }
 
     fn previous_tab(&mut self) {
         match self.focus.tab {
-            // Tab::Graph => self.focus.tab = Tab::Logs,
-            Tab::Graph => {}
-            Tab::Logs => self.focus.tab = Tab::Graph,
+            Tab::Graph => self.focus.tab = Tab::Logs,
+            // Tab::Logs => self.focus.tab = Tab::Graph,
+            Tab::Logs => self.focus.tab = Tab::Logs,
         }
     }
 
     fn next_tab(&mut self) {
         // TODO: Handle n tabs
         match self.focus.tab {
-            // Tab::Graph => self.focus.tab = Tab::Logs,
-            Tab::Graph => {}
-            Tab::Logs => self.focus.tab = Tab::Graph,
+            Tab::Graph => self.focus.tab = Tab::Logs,
+            // Tab::Logs => self.focus.tab = Tab::Graph,
+            Tab::Logs => self.focus.tab = Tab::Logs,
         }
     }
 }
