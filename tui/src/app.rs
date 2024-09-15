@@ -19,7 +19,7 @@ use ratatui::{
     Terminal,
 };
 use std::{
-    collections::{btree_map::Entry, BTreeMap, HashSet},
+    collections::{btree_map::Entry, BTreeMap, HashSet, VecDeque},
     fs::{self, OpenOptions},
     io::Write,
     sync::mpsc::Receiver,
@@ -86,6 +86,7 @@ pub struct App {
     pub list_state: ListState,
     pub log_list_state: ListState,
     pub datasets: Datasets,
+    pub query_history: VecDeque<String>,
     pub logs: Logs,
     pub facet_colours: BTreeMap<String, Color>,
 }
@@ -108,6 +109,7 @@ impl App {
             logs: Logs::default(),
             facet_colours: BTreeMap::default(),
             tabs: vec!["Logs".into()],
+            query_history: VecDeque::default(),
         }
     }
 
@@ -150,8 +152,8 @@ impl App {
                                     ..self.focus
                                 });
                             }
-                            KeyCode::Char('j') => self.next(),
-                            KeyCode::Char('k') => self.previous(),
+                            KeyCode::Char('j') | KeyCode::Down => self.next(),
+                            KeyCode::Char('k') | KeyCode::Up => self.previous(),
                             KeyCode::Char('x') => self.delete_query(),
                             KeyCode::Char('r') => match self.focus.panel {
                                 Focus::QueryInput => {}
@@ -230,7 +232,6 @@ impl App {
                                     }
                                     Focus::Search => {
                                         let filter = self.inputs.get(Focus::Search);
-                                        // self.logs.filters.insert(filter.into());
                                         self.add_filter(filter.into());
                                         self.set_focus(UIFocus {
                                             panel: Focus::Default,
@@ -285,6 +286,17 @@ impl App {
                             }
                             KeyCode::Right => {
                                 self.inputs.move_cursor_right(self.focus.panel);
+                            }
+                            KeyCode::Up => {
+                                self.inputs.clear(Focus::QueryInput);
+                                let query = self.query_history.pop_front().unwrap_or_default();
+                                self.inputs.set(Focus::QueryInput, query.clone());
+                                self.query_history.push_back(query);
+                            }
+                            KeyCode::Down => {
+                                let query = self.query_history.pop_back().unwrap_or_default();
+                                self.inputs.set(Focus::QueryInput, query.clone());
+                                self.query_history.push_front(query);
                             }
                             KeyCode::Esc => match self.focus.panel {
                                 Focus::SessionLoad => {}
@@ -390,7 +402,8 @@ impl App {
         }
     }
 
-    fn add_query(&self, query: String) {
+    fn add_query(&mut self, query: String) {
+        self.query_history.push_back(query.clone());
         _ = self.ui_tx.send(UIEvent::AddQuery(query));
     }
 

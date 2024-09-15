@@ -112,6 +112,10 @@ impl Inputs {
         }
     }
 
+    pub fn set(&mut self, focus: Focus, value: String) {
+        self._inputs[focus as usize].buffer = value;
+    }
+
     pub fn clear(&mut self, focus: Focus) {
         self._inputs[focus as usize].buffer.clear();
     }

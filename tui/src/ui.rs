@@ -33,6 +33,7 @@ pub const PALETTES: [tailwind::Palette; 9] = [
 pub fn ui(app: &mut App, frame: &mut Frame) {
     let area = frame.area();
     let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]);
+
     // let [header_area, area] = vertical.areas(area);
 
     // render_tabs(app, frame, header_area);
