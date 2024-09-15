@@ -6,13 +6,25 @@ pub struct Input {
 }
 
 pub struct Inputs {
-    _inputs: [Input; 6],
+    _inputs: [Input; 9],
 }
 
 impl Inputs {
     pub fn new() -> Self {
         Inputs {
             _inputs: [
+                Input {
+                    buffer: String::new(),
+                    cursor_position: 0,
+                },
+                Input {
+                    buffer: String::new(),
+                    cursor_position: 0,
+                },
+                Input {
+                    buffer: String::new(),
+                    cursor_position: 0,
+                },
                 Input {
                     buffer: String::new(),
                     cursor_position: 0,

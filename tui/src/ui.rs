@@ -1,4 +1,3 @@
-use crate::dataset::LogState;
 use chrono::{DateTime, NaiveDateTime, Utc};
 
 use ratatui::{
@@ -34,9 +33,9 @@ pub const PALETTES: [tailwind::Palette; 9] = [
 pub fn ui(app: &mut App, frame: &mut Frame) {
     let area = frame.area();
     let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]);
-    let [header_area, area] = vertical.areas(area);
+    // let [header_area, area] = vertical.areas(area);
 
-    render_tabs(app, frame, header_area);
+    // render_tabs(app, frame, header_area);
 
     match app.focus.tab {
         Tab::Graph => {
@@ -67,6 +66,7 @@ pub fn ui(app: &mut App, frame: &mut Frame) {
                         render_splash(app, frame, graph_area);
                     }
                 }
+                Focus::Search => {}
             }
         }
         Tab::Logs => {
@@ -90,90 +90,56 @@ pub fn ui(app: &mut App, frame: &mut Frame) {
                             render_log_detail(app, frame, log_area);
                         }
                     } else if app.focus.loading {
-                        render_loading(app, frame, log_area)
+                        render_loading(app, frame, area)
                     } else {
-                        render_splash(app, frame, log_area);
+                        render_splash(app, frame, area);
                     }
-                    // match app.logs.state {
-                    //     LogState::Show => {}
-                    //     LogState::None => ,
-                    //     LogState::Loading => render_loading(app, frame, log_area),
-                    // }
                 }
+                Focus::Search => render_search(app, frame, area),
                 _ => render_splash(app, frame, area),
             }
         }
     }
 }
 
+pub fn render_search(app: &mut App, frame: &mut Frame, area: Rect) {
+    let area = centered_rect(60, 20, area);
+    let vertical = Layout::vertical([Constraint::Length(3), Constraint::Length(3)]);
+    let [prompt_area, input_area] = vertical.areas(area);
+
+    let prompt = Text::from("Search term");
+    let input = Paragraph::new(app.inputs.get(Focus::Search))
+        .style(match app.focus.panel {
+            Focus::Search => Style::default().fg(app.config.theme.focus_fg),
+            _ => Style::default(),
+        })
+        .block(
+            Block::default()
+                .padding(Padding::ZERO)
+                .borders(Borders::BOTTOM),
+        );
+
+    frame.render_widget(Clear, area);
+    frame.render_widget(prompt, prompt_area);
+    frame.render_widget(input, input_area);
+}
+
 // Creates a Line for a log detail with styling based on content
-pub fn map_detail_line<'a>(value: String) -> Line<'a> {
+pub fn map_detail_line<'a>(app: &App, value: String) -> Line<'a> {
     if value.contains("CorrelationId") || value.contains("requestId") {
         Line::from(value).style(Style::default().bold().fg(Color::LightGreen))
     } else if value.contains("level") && value.contains("Error") {
         Line::from(value).style(Style::default().bold().fg(Color::LightRed))
+    } else if !app.logs.filters.is_empty()
+        && value.contains(app.logs.filters.iter().next().unwrap())
+    {
+        Line::from(value).style(Style::default().bg(Color::LightRed))
     } else {
         Line::from(value)
     }
 }
 
 pub fn render_barchart(app: &mut App, frame: &mut Frame, area: Rect) {
-    // // let bars: Vec<Bar> = ["1", "2"]
-    // //     .iter()
-    // //     .map(|i| {
-    // //         Bar::default()
-    // //             .value(i.parse::<u64>().unwrap())
-    // //             .text_value("".into())
-    // //             .label(Line::from(i.to_owned()))
-    // //     })
-    // //     .collect();
-
-    // let bars: Vec<Bar> = app
-    //     .logs
-    //     .logs
-    //     .keys()
-    //     .map(|timestamp| {
-    //         Bar::default()
-    //             .value(1)
-    //             .text_value("".into())
-    //             .label(Line::from(timestamp.to_owned()))
-    //     })
-    //     .collect();
-    // let barchart = BarChart::default()
-    //     .data(BarGroup::default().bars(&bars))
-    //     .block(
-    //         Block::default()
-    //             .borders(Borders::ALL)
-    //             .border_type(BorderType::Rounded),
-    //     )
-    //     .style(Style::default());
-
-    // let sparkline = Sparkline::default()
-    //     .block(Block::bordered().title("Sparkline"))
-    //     .data(&[0, 0, 0, 0, 1, 0, 0])
-    //     .max(5)
-    //     .direction(RenderDirection::LeftToRight)
-    //     .style(Style::default().red());
-
-    // let dataset1 = Dataset::default()
-    //     .data(&app.logs.chart_data)
-    //     .marker(Marker::Block)
-    //     .style(Style::default().blue())
-    //     .graph_type(GraphType::Bar);
-
-    // let data2 = &app
-    //     .logs
-    //     .chart_data
-    //     .iter()
-    //     .map(|(x, y)| (x.to_owned(), 2_f64))
-    //     .collect::<Vec<(f64, f64)>>();
-
-    // let dataset2 = Dataset::default()
-    //     .data(data2)
-    //     .marker(Marker::Block)
-    //     .style(Style::default().red())
-    //     .graph_type(GraphType::Bar);
-
     let error_dataset = Dataset::default()
         .data(&app.logs.chart_data.error)
         .marker(Marker::Block)
@@ -195,11 +161,11 @@ pub fn render_barchart(app: &mut App, frame: &mut Frame, area: Rect) {
     let (max_x, _) = bounds.maxes;
 
     let min_x_date_time = DateTime::<Utc>::from_utc(
-        NaiveDateTime::from_timestamp_opt(min_x as i64 / 1000, 483).unwrap(),
+        NaiveDateTime::from_timestamp_opt(min_x as i64 / 1000, 0).unwrap(),
         Utc,
     );
     let max_x_date_time = DateTime::<Utc>::from_utc(
-        NaiveDateTime::from_timestamp_opt(max_x as i64 / 1000, 483).unwrap(),
+        NaiveDateTime::from_timestamp_opt(max_x as i64 / 1000, 0).unwrap(),
         Utc,
     );
 
@@ -261,8 +227,10 @@ pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
     let items = app
         .logs
         .logs
-        .keys()
-        .map(|k| k.to_owned())
+        .iter()
+        // .keys()
+        .filter(|(_, v)| apply_filter(app, v))
+        .map(|(k, _)| k.to_owned())
         .collect::<Vec<String>>();
 
     let list = List::new(items)
@@ -283,9 +251,29 @@ pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_stateful_widget(list, area, &mut app.log_list_state);
 }
 
+pub fn apply_filter(app: &App, log_lines: &[String]) -> bool {
+    if app.logs.filters.is_empty() {
+        return true;
+    }
+    for line in log_lines {
+        for filter in &app.logs.filters {
+            if line.contains(filter) {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
 pub fn render_log(app: &mut App, frame: &mut Frame, area: Rect) {
     let logs = app.logs.clone();
-    let lines = logs.selected().unwrap_or(&vec![]).to_owned();
+    let default = vec![]; // TODO??
+    let lines = logs
+        .selected()
+        .unwrap_or(&default)
+        .iter()
+        .map(|v| map_detail_line(app, v.to_string()));
     let list = List::new(lines)
         .block(
             Block::default()
@@ -556,7 +544,7 @@ pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
-    let input = Paragraph::new(app.inputs.get(Focus::QueryInput))
+    let input = Paragraph::new(app.inputs.get(Focus::QueryInput).bold())
         .style(match app.focus.panel {
             Focus::QueryInput => Style::default().fg(app.config.theme.focus_fg),
             _ => Style::default(),

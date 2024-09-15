@@ -1,6 +1,6 @@
 use crate::{
     backend::{Bounds, PayloadType, UIEvent},
-    dataset::{Dataset, Datasets, LogState, Logs},
+    dataset::{Dataset, Datasets, Logs},
     input::Inputs,
     query::NRQL,
     ui::{map_detail_line, ui},
@@ -19,7 +19,7 @@ use ratatui::{
     Terminal,
 };
 use std::{
-    collections::{btree_map::Entry, BTreeMap},
+    collections::{btree_map::Entry, BTreeMap, HashSet},
     fs::{self, OpenOptions},
     io::Write,
     sync::mpsc::Receiver,
@@ -55,7 +55,8 @@ pub enum Focus {
     SessionSave = 5,
     Default = 3,
     Log = 6,
-    LogDetail,
+    LogDetail = 7,
+    Search = 8,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -75,7 +76,7 @@ pub enum Tab {
     Logs = 1,
 }
 
-pub struct App<'a> {
+pub struct App {
     pub config: Box<Config>,
     pub inputs: Inputs,
     pub focus: UIFocus,
@@ -85,11 +86,11 @@ pub struct App<'a> {
     pub list_state: ListState,
     pub log_list_state: ListState,
     pub datasets: Datasets,
-    pub logs: Logs<'a>,
+    pub logs: Logs,
     pub facet_colours: BTreeMap<String, Color>,
 }
 
-impl App<'_> {
+impl App {
     pub fn new(
         config: Box<Config>,
         data_rx: Receiver<PayloadType>,
@@ -137,6 +138,11 @@ impl App<'_> {
                                     ..self.focus
                                 });
                             }
+                            KeyCode::Char('/') => self.set_focus(UIFocus {
+                                panel: Focus::Search,
+                                input_mode: InputMode::Input,
+                                ..self.focus
+                            }),
                             KeyCode::Char('e') => {
                                 self.set_focus(UIFocus {
                                     panel: Focus::QueryInput,
@@ -215,14 +221,21 @@ impl App<'_> {
                                             loading: true,
                                             ..self.focus
                                         });
-                                        // self.logs.state = LogState::Loading;
-                                        // self.inputs.clear(Focus::QueryInput);
                                     }
                                     Focus::Rename => {
                                         self.rename_query(
                                             self.datasets.selected.to_owned(),
                                             self.inputs.get(Focus::Rename).to_owned(),
                                         );
+                                    }
+                                    Focus::Search => {
+                                        let filter = self.inputs.get(Focus::Search);
+                                        // self.logs.filters.insert(filter.into());
+                                        self.add_filter(filter.into());
+                                        self.set_focus(UIFocus {
+                                            panel: Focus::Default,
+                                            ..self.focus
+                                        });
                                     }
                                     Focus::SessionLoad => {
                                         match self.inputs.get(Focus::SessionLoad) {
@@ -274,7 +287,7 @@ impl App<'_> {
                                 self.inputs.move_cursor_right(self.focus.panel);
                             }
                             KeyCode::Esc => match self.focus.panel {
-                                Focus::SessionLoad | Focus::SessionSave => {}
+                                Focus::SessionLoad => {}
                                 _ => {
                                     self.set_focus(UIFocus {
                                         panel: Focus::Default,
@@ -324,23 +337,18 @@ impl App<'_> {
                         }
                     }
                     PayloadType::Log(payload) => {
-                        let mut logs: BTreeMap<String, Vec<Line<'_>>> = BTreeMap::new();
+                        let mut logs: BTreeMap<String, Vec<String>> = BTreeMap::new();
                         for (timestamp, log) in payload.logs {
-                            logs.insert(
-                                timestamp,
-                                log.split('\n')
-                                    .map(|v| map_detail_line(v.into()))
-                                    .collect::<Vec<Line>>(),
-                            );
+                            logs.insert(timestamp, log.split('\n').map(|v| v.into()).collect());
                         }
 
                         self.logs = Logs {
-                            // state: LogState::Show,
                             logs,
                             log_item_list_state: ListState::default(),
                             selected: String::new(),
                             chart_data: payload.chart_data,
                             bounds: payload.bounds,
+                            filters: HashSet::default(),
                         };
 
                         self.set_focus(UIFocus {
@@ -351,6 +359,19 @@ impl App<'_> {
                 }
             }
         }
+    }
+
+    // TODO
+    fn add_filter(&mut self, filter: String) {
+        self.logs.filters.insert(filter.clone());
+        self.logs.logs.retain(|_key, value| {
+            for line in value {
+                if line.contains(&filter) {
+                    return true;
+                }
+            }
+            false
+        })
     }
 
     fn rename_query(&mut self, query: String, alias: String) {

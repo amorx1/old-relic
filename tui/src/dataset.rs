@@ -1,13 +1,10 @@
 use std::{
-    collections::{self, btree_map::Entry, BTreeMap},
+    collections::{self, btree_map::Entry, BTreeMap, HashSet},
     string::String,
     vec::Vec,
 };
 
-use ratatui::{
-    prelude::Line,
-    widgets::{self, ListState},
-};
+use ratatui::{prelude::Line, widgets::ListState};
 
 use crate::backend::{Bounds, ChartData};
 
@@ -24,30 +21,23 @@ pub struct Datasets {
     pub selected: String,
 }
 
-#[derive(Clone, Default)]
-pub enum LogState {
-    #[default]
-    None,
-    Loading,
-    Show,
-}
-
 #[derive(Default, Clone)]
-pub struct Logs<'a> {
+pub struct Logs {
     // pub state: LogState,
-    pub logs: BTreeMap<String, Vec<Line<'a>>>,
+    pub logs: BTreeMap<String, Vec<String>>,
     pub chart_data: ChartData,
     pub bounds: Bounds,
     pub log_item_list_state: ListState,
     pub selected: String,
+    pub filters: HashSet<String>,
 }
 
-impl Logs<'_> {
-    pub fn selected(&self) -> Option<&Vec<Line<'_>>> {
+impl Logs {
+    pub fn selected(&self) -> Option<&Vec<String>> {
         self.logs.get(&self.selected)
     }
 
-    pub fn iter(&self) -> collections::btree_map::Iter<'_, String, Vec<Line<'_>>> {
+    pub fn iter(&self) -> collections::btree_map::Iter<'_, String, Vec<String>> {
         self.logs.iter()
     }
 
