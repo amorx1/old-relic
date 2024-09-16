@@ -76,8 +76,9 @@ pub fn ui(app: &mut App, frame: &mut Frame) {
             let [input_area, rest] = vertical.areas(area);
             let [list_area, rest] = horizontal.areas(rest);
 
-            let [barchart_area, log_area] =
-                Layout::vertical([Constraint::Max(10), Constraint::Min(30)]).areas(rest);
+            let [barchart_area, seek_area, log_area] =
+                Layout::vertical([Constraint::Max(10), Constraint::Max(1), Constraint::Min(30)])
+                    .areas(rest);
 
             match app.focus.panel {
                 Focus::SessionSave => render_save_session(app, frame, area),
@@ -87,6 +88,7 @@ pub fn ui(app: &mut App, frame: &mut Frame) {
                     if !app.logs.is_empty() {
                         render_log_list(app, frame, list_area);
                         render_barchart(app, frame, barchart_area);
+                        render_seek(app, frame, seek_area);
                         render_log(app, frame, log_area);
                         if app.focus.panel == Focus::LogDetail {
                             render_log_detail(app, frame, log_area);
@@ -140,6 +142,49 @@ pub fn style_detail_line<'a>(app: &App, value: String) -> Line<'a> {
         Line::from(value)
     }
 }
+pub fn render_seek(app: &mut App, frame: &mut Frame, area: Rect) {
+    let curr = app.logs.selected.clone().parse::<f64>().unwrap();
+    let vec = vec![(curr, 0.5)];
+    let dataset = Dataset::default()
+        .data(&vec)
+        .marker(Marker::HalfBlock)
+        .style(Style::default().green())
+        .graph_type(GraphType::Bar);
+
+    let bounds = app.logs.bounds;
+    let (min_x, _) = bounds.mins;
+    let (max_x, _) = bounds.maxes;
+
+    let min_x_date_time = DateTime::<Utc>::from_utc(
+        NaiveDateTime::from_timestamp_opt(min_x as i64 / 1000, 0).unwrap(),
+        Utc,
+    );
+    let max_x_date_time = DateTime::<Utc>::from_utc(
+        NaiveDateTime::from_timestamp_opt(max_x as i64 / 1000, 0).unwrap(),
+        Utc,
+    );
+
+    // Create the X axis and define its properties
+    let x_axis = Axis::default()
+        // .style(Style::default().white())
+        .bounds([min_x, max_x]);
+
+    // Create the Y axis and define its properties
+    let y_axis = Axis::default()
+        // .style(Style::default().white())
+        .bounds([0.0, 1.0]);
+
+    // Create the chart and link all the parts together
+    let chart = Chart::new(vec![dataset])
+        .block(
+            Block::new().padding(Padding::horizontal(3)), // .borders(Borders::ALL)
+                                                          // .border_type(BorderType::Rounded),
+        )
+        .x_axis(x_axis)
+        .y_axis(y_axis);
+
+    frame.render_widget(chart, area);
+}
 
 pub fn render_barchart(app: &mut App, frame: &mut Frame, area: Rect) {
     let error_dataset = Dataset::default()
@@ -192,7 +237,7 @@ pub fn render_barchart(app: &mut App, frame: &mut Frame, area: Rect) {
     // Create the Y axis and define its properties
     let y_axis = Axis::default()
         .style(Style::default().white())
-        .bounds([0.0, 5.0]);
+        .bounds([0.0, 3.0]);
 
     // Create the chart and link all the parts together
     let chart = Chart::new(vec![info_dataset, debug_dataset, error_dataset])
@@ -241,7 +286,7 @@ pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .title("Timestamps"),
+                .title("Timestamps".bold()),
         )
         .highlight_style(
             Style::new()
@@ -282,7 +327,7 @@ pub fn render_log(app: &mut App, frame: &mut Frame, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .title("Log"),
+                .title("Log".bold()),
         )
         .highlight_style(
             Style::new()
@@ -556,7 +601,7 @@ pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .title("Query"),
+                .title("Query".bold()),
         );
     frame.render_widget(input, area);
 }

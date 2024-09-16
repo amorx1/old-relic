@@ -358,9 +358,9 @@ impl App {
                         }
 
                         self.logs = Logs {
+                            selected: logs.first_entry().unwrap().key().into(),
                             logs,
                             log_item_list_state: ListState::default(),
-                            selected: String::new(),
                             chart_data: payload.chart_data,
                             bounds: payload.bounds,
                             filters: HashSet::default(),
