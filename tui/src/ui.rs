@@ -81,6 +81,7 @@ pub fn ui(app: &mut App, frame: &mut Frame) {
 
             match app.focus.panel {
                 Focus::SessionSave => render_save_session(app, frame, area),
+                Focus::SessionLoad => render_load_session(app, frame, area),
                 Focus::Default | Focus::QueryInput | Focus::Log | Focus::LogDetail => {
                     render_query_box(app, frame, input_area);
                     if !app.logs.is_empty() {
@@ -125,8 +126,8 @@ pub fn render_search(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(input, input_area);
 }
 
-// Creates a Line for a log detail with styling based on content
-pub fn map_detail_line<'a>(app: &App, value: String) -> Line<'a> {
+// Creates a widget::Line for a log detail with styling based on content
+pub fn style_detail_line<'a>(app: &App, value: String) -> Line<'a> {
     if value.contains("CorrelationId") || value.contains("requestId") {
         Line::from(value).style(Style::default().bold().fg(Color::LightGreen))
     } else if value.contains("level") && value.contains("Error") {
@@ -149,7 +150,7 @@ pub fn render_barchart(app: &mut App, frame: &mut Frame, area: Rect) {
     let debug_dataset = Dataset::default()
         .data(&app.logs.chart_data.debug)
         .marker(Marker::Block)
-        .style(Style::default().green())
+        .style(Style::default().magenta())
         .graph_type(GraphType::Bar);
     let info_dataset = Dataset::default()
         .data(&app.logs.chart_data.info)
@@ -197,6 +198,7 @@ pub fn render_barchart(app: &mut App, frame: &mut Frame, area: Rect) {
     let chart = Chart::new(vec![info_dataset, debug_dataset, error_dataset])
         .block(
             Block::new()
+                .padding(Padding::horizontal(2))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
@@ -274,7 +276,7 @@ pub fn render_log(app: &mut App, frame: &mut Frame, area: Rect) {
         .selected()
         .unwrap_or(&default)
         .iter()
-        .map(|v| map_detail_line(app, v.to_string()));
+        .map(|v| style_detail_line(app, v.to_string()));
     let list = List::new(lines)
         .block(
             Block::default()

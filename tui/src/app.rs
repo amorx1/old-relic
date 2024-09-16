@@ -3,7 +3,7 @@ use crate::{
     dataset::{Dataset, Datasets, Logs},
     input::Inputs,
     query::NRQL,
-    ui::{map_detail_line, ui},
+    ui::{style_detail_line, ui},
     Config,
 };
 
@@ -178,6 +178,7 @@ impl App {
                                 }),
                             },
                             KeyCode::Char('T') => self.next_tab(),
+                            KeyCode::Char('C') => self.clear_filters(),
                             KeyCode::Esc => self.set_focus(UIFocus {
                                 panel: Focus::Default,
                                 ..self.focus
@@ -291,11 +292,13 @@ impl App {
                                 self.inputs.clear(Focus::QueryInput);
                                 let query = self.query_history.pop_front().unwrap_or_default();
                                 self.inputs.set(Focus::QueryInput, query.clone());
+                                self.inputs.move_cursor_end(Focus::QueryInput);
                                 self.query_history.push_back(query);
                             }
                             KeyCode::Down => {
                                 let query = self.query_history.pop_back().unwrap_or_default();
                                 self.inputs.set(Focus::QueryInput, query.clone());
+                                self.inputs.move_cursor_end(Focus::QueryInput);
                                 self.query_history.push_front(query);
                             }
                             KeyCode::Esc => match self.focus.panel {
@@ -547,27 +550,38 @@ impl App {
     pub fn load_session(&mut self) {
         let session_path = self.config.session.session_path.clone();
         let yaml = fs::read_to_string(session_path).expect("ERROR: Could not read session file!");
-        let session_queries: Option<BTreeMap<String, String>> =
+        let session_queries: Vec<String> =
             serde_yaml::from_str(&yaml).expect("ERROR: Could not deserialize session file!");
 
-        if let Some(queries) = session_queries {
-            let iter = queries.into_iter();
-            for (alias, query) in iter {
-                // TODO: Avoid this
-                let clean_query = query.replace("as value", "");
-                if let Ok(parsed_query) = clean_query.trim().to_nrql() {
-                    // TODO: Handle Log session
-                    self.add_query(query);
-                    self.rename_query(parsed_query.to_string().unwrap(), alias);
-                }
-            }
-        }
-
+        self.query_history = VecDeque::from(session_queries);
         self.config.session.is_loaded = true;
     }
+    // pub fn load_session(&mut self) {
+    //     let session_path = self.config.session.session_path.clone();
+    //     let yaml = fs::read_to_string(session_path).expect("ERROR: Could not read session file!");
+    //     let session_queries: Option<BTreeMap<String, String>> =
+    //         serde_yaml::from_str(&yaml).expect("ERROR: Could not deserialize session file!");
+
+    //     dbg!(&session_queries);
+
+    //     if let Some(queries) = session_queries {
+    //         let iter = queries.into_iter();
+    //         for (alias, query) in iter {
+    //             // TODO: Avoid this
+    //             let clean_query = query.replace("as value", "");
+    //             if let Ok(parsed_query) = clean_query.trim().to_nrql() {
+    //                 // TODO: Handle Log session
+    //                 self.add_query(query);
+    //                 self.rename_query(parsed_query.to_string().unwrap(), alias);
+    //             }
+    //         }
+    //     }
+
+    //     self.config.session.is_loaded = true;
+    // }
 
     pub fn save_session(&self) {
-        let output = self
+        let timeseries_queries = self
             .datasets
             .iter()
             .map(|(q, data)| {
@@ -578,8 +592,14 @@ impl App {
             })
             .collect::<BTreeMap<String, String>>();
 
-        let yaml: String =
-            serde_yaml::to_string(&output).expect("ERROR: Could not serialize queries!");
+        let mut yaml: String = serde_yaml::to_string(&timeseries_queries)
+            .expect("ERROR: Could not serialize queries!");
+
+        let log_queries = serde_yaml::to_string(&self.query_history)
+            .expect("ERROR: Could not serialize query history!");
+
+        yaml += &log_queries;
+
         let session_path = self.config.session.session_path.clone();
         let mut file = OpenOptions::new()
             .read(true)
@@ -607,5 +627,15 @@ impl App {
             // Tab::Logs => self.focus.tab = Tab::Graph,
             Tab::Logs => self.focus.tab = Tab::Logs,
         }
+    }
+
+    fn clear_filters(&mut self) {
+        self.logs.filters.clear();
+        self.add_query(
+            self.query_history
+                .back()
+                .unwrap_or(&String::default())
+                .to_owned(),
+        );
     }
 }

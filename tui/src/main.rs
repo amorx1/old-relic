@@ -66,8 +66,8 @@ impl Config {
         let session = Session {
             queries: None,
             session_path,
-            // is_loaded: false,
-            is_loaded: true,
+            is_loaded: false,
+            // is_loaded: true,
         };
 
         Box::new(Config {

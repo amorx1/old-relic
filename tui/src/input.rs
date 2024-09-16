@@ -82,6 +82,20 @@ impl Inputs {
         self._inputs[focus as usize].cursor_position = self.clamp_cursor(focus, cursor_moved_right);
     }
 
+    pub fn move_cursor_end(&mut self, focus: Focus) {
+        let cursor_moved_right = self._inputs[focus as usize]
+            .cursor_position
+            .saturating_add(999);
+        self._inputs[focus as usize].cursor_position = self.clamp_cursor(focus, cursor_moved_right);
+    }
+
+    pub fn move_cursor_start(&mut self, focus: Focus) {
+        let cursor_moved_left = self._inputs[focus as usize]
+            .cursor_position
+            .saturating_sub(999);
+        self._inputs[focus as usize].cursor_position = self.clamp_cursor(focus, cursor_moved_left);
+    }
+
     pub fn enter_char(&mut self, focus: Focus, new_char: char) {
         let cursor_position = self.get_cursor_position(focus);
         self._inputs[focus as usize]

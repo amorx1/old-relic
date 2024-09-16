@@ -1,18 +1,12 @@
-use crate::query::{QueryType, Timeseries, TimeseriesResult};
+use crate::query::{Timeseries, TimeseriesResult};
 use anyhow::{Error, Result};
-use ratatui::widgets::Dataset;
 
 use std::{
     collections::BTreeMap,
     sync::mpsc::{channel, Receiver, Sender},
-    time::Duration,
 };
-use tokio::{
-    runtime::{self, Runtime},
-    time::sleep,
-};
+use tokio::runtime::{self, Runtime};
 
-use chrono::{Timelike, Utc};
 use crossbeam_channel::{unbounded, Receiver as MReceiver, Sender as MSender};
 
 use crate::client::NewRelicClient;
@@ -125,7 +119,6 @@ pub async fn query_log(query: String, client: NewRelicClient) -> Result<LogPaylo
         .unwrap_or_default();
 
     let mut logs: BTreeMap<String, String> = BTreeMap::new();
-    // let mut chart_data: Vec<(f64, f64)> = vec![];
     let mut chart_data = ChartData::default();
     let mut min_bounds: (f64, f64) = (f64::MAX, f64::MAX);
     let mut max_bounds: (f64, f64) = (0 as f64, 0 as f64);
