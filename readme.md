@@ -1,4 +1,4 @@
-# uRelic
+# Old Relic
 New Relic APM TUI client.
 
 ![alt text](https://github.com/amorx1/urelic/blob/main/screenshot.png?raw=true)

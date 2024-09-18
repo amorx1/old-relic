@@ -96,7 +96,7 @@ pub fn ui(app: &mut App, frame: &mut Frame) {
                     } else if app.focus.loading {
                         render_loading(app, frame, area)
                     } else {
-                        render_splash(app, frame, area);
+                        render_splash(app, frame, log_area);
                     }
                 }
                 Focus::Search => render_search(app, frame, area),
@@ -390,10 +390,10 @@ pub fn render_splash(_app: &mut App, frame: &mut Frame, area: Rect) {
     let dummy = BigText::builder()
         .pixel_size(PixelSize::Full)
         .style(Style::new().blue())
-        .lines(vec!["XRELIC".light_green().into()])
+        .lines(vec!["Old Relic".light_green().into()])
         .build();
 
-    let center = centered_rect(30, 30, area);
+    let center = centered_rect(60, 60, area);
     frame.render_widget(dummy, center);
 }
 
@@ -562,7 +562,7 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
             let dummy = BigText::builder()
                 .pixel_size(PixelSize::Full)
                 .style(Style::new().blue())
-                .lines(vec!["XRELIC".light_green().into()])
+                .lines(vec!["Old Relic".light_green().into()])
                 .build();
 
             let center = centered_rect(30, 30, area);
