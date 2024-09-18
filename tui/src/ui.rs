@@ -132,7 +132,9 @@ pub fn render_search(app: &mut App, frame: &mut Frame, area: Rect) {
 pub fn style_detail_line<'a>(app: &App, value: String) -> Line<'a> {
     if value.contains("CorrelationId") || value.contains("requestId") {
         Line::from(value).style(Style::default().bold().fg(Color::LightGreen))
-    } else if value.contains("level") && value.contains("Error") {
+    } else if (value.contains("level") && value.contains("Error"))
+        || (value.contains("severity.text") && value.contains("Error"))
+    {
         Line::from(value).style(Style::default().bold().fg(Color::LightRed))
     } else if !app.logs.filters.is_empty()
         && value.contains(app.logs.filters.iter().next().unwrap())
@@ -207,6 +209,15 @@ pub fn render_barchart(app: &mut App, frame: &mut Frame, area: Rect) {
     let (min_x, _) = bounds.mins;
     let (max_x, _) = bounds.maxes;
 
+    let selected_date_time = DateTime::<Utc>::from_utc(
+        NaiveDateTime::from_timestamp_opt(
+            app.logs.selected.clone().parse::<i64>().unwrap() / 1000,
+            0,
+        )
+        .unwrap(),
+        Utc,
+    );
+
     let min_x_date_time = DateTime::<Utc>::from_utc(
         NaiveDateTime::from_timestamp_opt(min_x as i64 / 1000, 0).unwrap(),
         Utc,
@@ -243,6 +254,24 @@ pub fn render_barchart(app: &mut App, frame: &mut Frame, area: Rect) {
     let chart = Chart::new(vec![info_dataset, debug_dataset, error_dataset])
         .block(
             Block::new()
+                .title_bottom(
+                    // Line::from(format!(
+                    //     "{}, {}",
+                    //     selected_date_time.date_naive(),
+                    //     selected_date_time.time(),
+                    // ))
+                    Line::from(format!(
+                        "{}, {} ({} hours ago)",
+                        selected_date_time.date_naive(),
+                        selected_date_time.time(),
+                        Utc::now()
+                            .signed_duration_since(selected_date_time)
+                            .num_hours(),
+                    ))
+                    .bold()
+                    .red()
+                    .centered(),
+                )
                 .padding(Padding::horizontal(2))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),

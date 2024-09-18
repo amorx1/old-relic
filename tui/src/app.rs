@@ -19,7 +19,10 @@ use ratatui::{
     Terminal,
 };
 use std::{
-    collections::{btree_map::Entry, BTreeMap, HashSet, VecDeque},
+    collections::{
+        btree_map::{Entry, OccupiedEntry},
+        BTreeMap, HashSet, VecDeque,
+    },
     fs::{self, OpenOptions},
     io::Write,
     sync::mpsc::Receiver,
@@ -140,7 +143,7 @@ impl App {
                                     ..self.focus
                                 });
                             }
-                            KeyCode::Char('/') => self.set_focus(UIFocus {
+                            KeyCode::Char('F') => self.set_focus(UIFocus {
                                 panel: Focus::Search,
                                 input_mode: InputMode::Input,
                                 ..self.focus
@@ -152,8 +155,14 @@ impl App {
                                     ..self.focus
                                 });
                             }
-                            KeyCode::Char('j') | KeyCode::Down => self.next(),
-                            KeyCode::Char('k') | KeyCode::Up => self.previous(),
+                            KeyCode::Char('j') | KeyCode::Down => match self.focus.panel {
+                                Focus::LogDetail => {}
+                                _ => self.next(),
+                            },
+                            KeyCode::Char('k') | KeyCode::Up => match self.focus.panel {
+                                Focus::LogDetail => {}
+                                _ => self.previous(),
+                            },
                             KeyCode::Char('x') => self.delete_query(),
                             KeyCode::Char('r') => match self.focus.panel {
                                 Focus::QueryInput => {}
@@ -183,7 +192,7 @@ impl App {
                                 panel: Focus::Default,
                                 ..self.focus
                             }),
-                            KeyCode::Enter => match self.focus.panel {
+                            KeyCode::Enter | KeyCode::Char(' ') => match self.focus.panel {
                                 Focus::Log => self.set_focus(UIFocus {
                                     panel: Focus::LogDetail,
                                     ..self.focus
@@ -357,14 +366,16 @@ impl App {
                             logs.insert(timestamp, log.split('\n').map(|v| v.into()).collect());
                         }
 
-                        self.logs = Logs {
-                            selected: logs.first_entry().unwrap().key().into(),
-                            logs,
-                            log_item_list_state: ListState::default(),
-                            chart_data: payload.chart_data,
-                            bounds: payload.bounds,
-                            filters: HashSet::default(),
-                        };
+                        if !logs.is_empty() {
+                            self.logs = Logs {
+                                selected: logs.first_entry().unwrap().key().into(),
+                                logs,
+                                log_item_list_state: ListState::default(),
+                                chart_data: payload.chart_data,
+                                bounds: payload.bounds,
+                                filters: HashSet::default(),
+                            };
+                        }
 
                         self.set_focus(UIFocus {
                             loading: false,
@@ -581,6 +592,8 @@ impl App {
     // }
 
     pub fn save_session(&self) {
+        let mut out = String::new();
+
         let timeseries_queries = self
             .datasets
             .iter()
@@ -592,13 +605,17 @@ impl App {
             })
             .collect::<BTreeMap<String, String>>();
 
-        let mut yaml: String = serde_yaml::to_string(&timeseries_queries)
-            .expect("ERROR: Could not serialize queries!");
+        if !timeseries_queries.is_empty() {
+            let yaml: String = serde_yaml::to_string(&timeseries_queries)
+                .expect("ERROR: Could not serialize queries!");
+
+            out += &yaml;
+        }
 
         let log_queries = serde_yaml::to_string(&self.query_history)
             .expect("ERROR: Could not serialize query history!");
 
-        yaml += &log_queries;
+        out += &log_queries;
 
         let session_path = self.config.session.session_path.clone();
         let mut file = OpenOptions::new()
@@ -608,7 +625,7 @@ impl App {
             .create(true)
             .open(session_path)
             .expect("ERROR: Could not open session file!");
-        file.write_all(yaml.as_bytes())
+        file.write_all(out.as_bytes())
             .expect("ERROR: Could not write to session file!");
     }
 

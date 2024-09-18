@@ -129,8 +129,10 @@ pub async fn query_log(query: String, client: NewRelicClient) -> Result<LogPaylo
             .expect("ERROR: Log had no timestamp")
             .to_string();
 
-        let level = if let Some(x) = log.get("level") {
-            x.to_string()
+        let level = if let Some(val) = log.get("level") {
+            val.to_string()
+        } else if let Some(val) = log.get("severity.text") {
+            val.to_string()
         } else {
             "Information".into()
         };
