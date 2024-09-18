@@ -131,7 +131,7 @@ pub fn render_search(app: &mut App, frame: &mut Frame, area: Rect) {
 // Creates a widget::Line for a log detail with styling based on content
 pub fn style_detail_line<'a>(app: &App, value: String) -> Line<'a> {
     if value.contains("CorrelationId") || value.contains("requestId") {
-        Line::from(value).style(Style::default().bold().fg(Color::LightGreen))
+        Line::from(value).style(Style::default().bold().fg(app.config.theme.focus_fg))
     } else if (value.contains("level") && value.contains("Error"))
         || (value.contains("severity.text") && value.contains("Error"))
     {
@@ -150,7 +150,7 @@ pub fn render_seek(app: &mut App, frame: &mut Frame, area: Rect) {
     let dataset = Dataset::default()
         .data(&vec)
         .marker(Marker::HalfBlock)
-        .style(Style::default().green())
+        .style(Style::default().fg(app.config.theme.focus_fg))
         .graph_type(GraphType::Bar);
 
     let bounds = app.logs.bounds;
@@ -386,22 +386,22 @@ pub fn render_tabs(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(tabs, area);
 }
 
-pub fn render_splash(_app: &mut App, frame: &mut Frame, area: Rect) {
+pub fn render_splash(app: &mut App, frame: &mut Frame, area: Rect) {
     let dummy = BigText::builder()
         .pixel_size(PixelSize::Full)
         .style(Style::new().blue())
-        .lines(vec!["Old Relic".light_green().into()])
+        .lines(vec!["Old Relic".fg(app.config.theme.focus_fg).into()])
         .build();
 
     let center = centered_rect(60, 60, area);
     frame.render_widget(dummy, center);
 }
 
-pub fn render_loading(_app: &mut App, frame: &mut Frame, area: Rect) {
+pub fn render_loading(app: &mut App, frame: &mut Frame, area: Rect) {
     let center = centered_rect(5, 5, area);
     let throbber = throbber_widgets_tui::Throbber::default()
         .label("Loading data...")
-        .style(Style::default().fg(Color::LightGreen))
+        .style(Style::default().fg(app.config.theme.focus_fg))
         .throbber_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
         .use_type(WhichUse::Spin);
     frame.render_widget(throbber, center);
@@ -562,7 +562,7 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
             let dummy = BigText::builder()
                 .pixel_size(PixelSize::Full)
                 .style(Style::new().blue())
-                .lines(vec!["Old Relic".light_green().into()])
+                .lines(vec!["Old Relic".fg(app.config.theme.focus_fg).into()])
                 .build();
 
             let center = centered_rect(30, 30, area);

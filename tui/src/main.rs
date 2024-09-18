@@ -34,7 +34,7 @@ use std::{
     time::Duration,
 };
 
-const DEFAULT_THEME: &str = "6";
+const DEFAULT_THEME: &str = "8";
 const NEW_RELIC_ENDPOINT: &str = "https://api.newrelic.com/graphql";
 
 pub struct Config {
