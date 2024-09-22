@@ -23,10 +23,10 @@ pub struct Datasets {
 
 #[derive(Default, Clone)]
 pub struct Logs {
-    // pub state: LogState,
     pub logs: BTreeMap<String, Vec<String>>,
     pub chart_data: ChartData,
     pub bounds: Bounds,
+    pub log_list_state: ListState,
     pub log_item_list_state: ListState,
     pub selected: String,
     pub filters: HashSet<String>,

@@ -87,7 +87,6 @@ pub struct App {
     pub data_rx: Receiver<PayloadType>,
     pub ui_tx: CrossBeamSender<UIEvent>,
     pub list_state: ListState,
-    pub log_list_state: ListState,
     pub datasets: Datasets,
     pub query_history: VecDeque<String>,
     pub logs: Logs,
@@ -107,7 +106,6 @@ impl App {
             ui_tx,
             focus: UIFocus::default(),
             list_state: ListState::default(),
-            log_list_state: ListState::default(),
             datasets: Datasets::new(),
             logs: Logs::default(),
             facet_colours: BTreeMap::default(),
@@ -374,6 +372,7 @@ impl App {
                                 chart_data: payload.chart_data,
                                 bounds: payload.bounds,
                                 filters: HashSet::default(),
+                                log_list_state: ListState::default(),
                             };
                         }
 
@@ -479,7 +478,7 @@ impl App {
                         return;
                     }
 
-                    let i = match self.log_list_state.selected() {
+                    let i = match self.logs.log_list_state.selected() {
                         Some(i) => {
                             if i >= self.logs.len() - 1 {
                                 0
@@ -490,7 +489,7 @@ impl App {
                         None => 0,
                     };
 
-                    self.log_list_state.select(Some(i));
+                    self.logs.log_list_state.select(Some(i));
                     self.logs.select(i);
                 }
             },
@@ -541,7 +540,7 @@ impl App {
                         return;
                     }
 
-                    let i = match self.log_list_state.selected() {
+                    let i = match self.logs.log_list_state.selected() {
                         Some(i) => {
                             if i == 0 {
                                 self.logs.len() - 1
@@ -551,7 +550,7 @@ impl App {
                         }
                         None => 0,
                     };
-                    self.log_list_state.select(Some(i));
+                    self.logs.log_list_state.select(Some(i));
                     self.logs.select(i);
                 }
             },

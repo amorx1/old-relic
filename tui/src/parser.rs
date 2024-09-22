@@ -48,6 +48,8 @@ fn parse_from(input: &str) -> IResult<&str, &str> {
 
 // TODO: Handle missing components
 pub fn parse_nrql(input: &str) -> Result<HashMap<String, String>> {
+    let mut res = String::new();
+
     let (remainder, from) = parse_from(input).map_err(|_| anyhow!("Parsing Error! : FROM"))?;
     let (remainder, select) =
         parse_select(remainder).map_err(|_| anyhow!("Parsing Error!: SELECT"))?;

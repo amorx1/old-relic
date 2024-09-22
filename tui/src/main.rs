@@ -34,7 +34,7 @@ use std::{
     time::Duration,
 };
 
-const DEFAULT_THEME: &str = "8";
+const DEFAULT_THEME: &str = "5";
 const NEW_RELIC_ENDPOINT: &str = "https://api.newrelic.com/graphql";
 
 pub struct Config {
@@ -67,7 +67,6 @@ impl Config {
             queries: None,
             session_path,
             is_loaded: false,
-            // is_loaded: true,
         };
 
         Box::new(Config {

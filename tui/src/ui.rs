@@ -5,8 +5,8 @@ use ratatui::{
     symbols::Marker,
     widgets::{
         Axis, Bar, BarChart, BarGroup, Block, BorderType, Borders, Chart, Clear, Dataset,
-        GraphType, LegendPosition, List, Padding, Paragraph, RenderDirection, Sparkline, Tabs,
-        Wrap,
+        GraphType, LegendPosition, List, Padding, Paragraph, RenderDirection, Scrollbar,
+        ScrollbarOrientation, ScrollbarState, Sparkline, Tabs, Wrap,
     },
 };
 use style::palette::tailwind;
@@ -71,7 +71,7 @@ pub fn ui(app: &mut App, frame: &mut Frame) {
             }
         }
         Tab::Logs => {
-            let horizontal = Layout::horizontal([Constraint::Percentage(15), Constraint::Min(20)]);
+            let horizontal = Layout::horizontal([Constraint::Percentage(10), Constraint::Min(20)]);
             let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(20)]);
             let [input_area, rest] = vertical.areas(area);
             let [list_area, rest] = horizontal.areas(rest);
@@ -144,13 +144,14 @@ pub fn style_detail_line<'a>(app: &App, value: String) -> Line<'a> {
         Line::from(value)
     }
 }
+
 pub fn render_seek(app: &mut App, frame: &mut Frame, area: Rect) {
     let curr = app.logs.selected.clone().parse::<f64>().unwrap();
     let vec = vec![(curr, 0.5)];
     let dataset = Dataset::default()
         .data(&vec)
         .marker(Marker::HalfBlock)
-        .style(Style::default().fg(app.config.theme.focus_fg))
+        .style(Style::default().fg(app.config.theme.chart_fg))
         .graph_type(GraphType::Bar);
 
     let bounds = app.logs.bounds;
@@ -315,7 +316,12 @@ pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .title("Timestamps".bold()),
+                .border_style(Style::default().fg(if app.focus.panel == Focus::Default {
+                    app.config.theme.focus_fg
+                } else {
+                    Color::White
+                }))
+                .title("[Timestamps]".bold()),
         )
         .highlight_style(
             Style::new()
@@ -325,7 +331,23 @@ pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
         .highlight_symbol(">>")
         .repeat_highlight_symbol(true);
 
-    frame.render_stateful_widget(list, area, &mut app.log_list_state);
+    let mut scrollbar_state = ScrollbarState::default()
+        .content_length(app.logs.len())
+        .position(app.logs.log_list_state.selected().unwrap_or_default());
+
+    let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(None)
+        .end_symbol(None);
+
+    frame.render_stateful_widget(list, area, &mut app.logs.log_list_state);
+    frame.render_stateful_widget(
+        scrollbar,
+        area.inner(Margin {
+            vertical: 1,
+            horizontal: 0,
+        }),
+        &mut scrollbar_state,
+    )
 }
 
 pub fn apply_filter(app: &App, log_lines: &[String]) -> bool {
@@ -356,7 +378,12 @@ pub fn render_log(app: &mut App, frame: &mut Frame, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .title("Log".bold()),
+                .border_style(Style::default().fg(if app.focus.panel == Focus::Log {
+                    app.config.theme.focus_fg
+                } else {
+                    Color::White
+                }))
+                .title("[Log]".bold()),
         )
         .highlight_style(
             Style::new()
@@ -630,7 +657,7 @@ pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .title("Query".bold()),
+                .title("[Query]".bold()),
         );
     frame.render_widget(input, area);
 }
