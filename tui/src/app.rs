@@ -2,27 +2,16 @@ use crate::{
     backend::{Bounds, PayloadType, UIEvent},
     dataset::{Dataset, Datasets, Logs},
     input::Inputs,
-    query::NRQL,
-    ui::{style_detail_line, ui},
+    ui::ui,
     Config,
 };
 
-use chrono::{Timelike, Utc};
 use crossbeam_channel::{Receiver as CrossBeamReceiver, Sender as CrossBeamSender};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use rand::{thread_rng, Rng};
-use ratatui::{
-    backend::Backend,
-    style::Color,
-    text::Line,
-    widgets::{self, GraphType, ListState},
-    Terminal,
-};
+use ratatui::{backend::Backend, style::Color, widgets::ListState, Terminal};
 use std::{
-    collections::{
-        btree_map::{Entry, OccupiedEntry},
-        BTreeMap, HashSet, VecDeque,
-    },
+    collections::{btree_map::Entry, BTreeMap, HashSet, VecDeque},
     fs::{self, OpenOptions},
     io::Write,
     sync::mpsc::Receiver,
