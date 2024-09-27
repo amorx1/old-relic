@@ -60,6 +60,7 @@ pub enum Focus {
     Log = 6,
     LogDetail = 7,
     Search = 8,
+    NoResult = 9,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -327,6 +328,11 @@ impl App {
 
             while let Some(payload) = self.data_rx.try_iter().next() {
                 match payload {
+                    PayloadType::None => self.set_focus(UIFocus {
+                        panel: Focus::NoResult,
+                        loading: false,
+                        ..self.focus
+                    }),
                     PayloadType::Timeseries(payload) => {
                         if let Entry::Vacant(e) = self.datasets.entry(payload.query.clone()) {
                             e.insert(Dataset {

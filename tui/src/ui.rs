@@ -54,7 +54,11 @@ pub fn ui(app: &mut App, frame: &mut Frame) {
                     render_query_list(app, frame, list_area);
                     render_rename_dialog(app, frame, graph_area);
                 }
-                Focus::Default | Focus::QueryInput | Focus::Log | Focus::LogDetail => {
+                Focus::Default
+                | Focus::QueryInput
+                | Focus::Log
+                | Focus::LogDetail
+                | Focus::NoResult => {
                     render_query_box(app, frame, input_area);
                     render_query_list(app, frame, list_area);
                     if let Some(dataset) = app.datasets.selected() {
@@ -83,7 +87,11 @@ pub fn ui(app: &mut App, frame: &mut Frame) {
             match app.focus.panel {
                 Focus::SessionSave => render_save_session(app, frame, area),
                 Focus::SessionLoad => render_load_session(app, frame, area),
-                Focus::Default | Focus::QueryInput | Focus::Log | Focus::LogDetail => {
+                Focus::Default
+                | Focus::QueryInput
+                | Focus::Log
+                | Focus::LogDetail
+                | Focus::NoResult => {
                     render_query_box(app, frame, input_area);
                     if !app.logs.is_empty() {
                         render_log_list(app, frame, list_area);
@@ -93,8 +101,13 @@ pub fn ui(app: &mut App, frame: &mut Frame) {
                         if app.focus.panel == Focus::LogDetail {
                             render_log_detail(app, frame, log_area);
                         }
+                        if app.focus.panel == Focus::NoResult {
+                            render_no_result(app, frame, log_area);
+                        }
                     } else if app.focus.loading {
                         render_loading(app, frame, area)
+                    } else if app.focus.panel == Focus::NoResult {
+                        render_no_result(app, frame, log_area);
                     } else {
                         render_splash(app, frame, log_area);
                     }
@@ -289,6 +302,22 @@ pub fn render_log_detail(app: &mut App, frame: &mut Frame, area: Rect) {
     let log = &app.logs.selected().unwrap()[key_idx];
 
     let paragraph = Paragraph::new(log.clone())
+        .wrap(Wrap { trim: true })
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .style(Style::default());
+
+    frame.render_widget(Clear, area);
+    frame.render_widget(paragraph, area);
+}
+
+pub fn render_no_result(app: &mut App, frame: &mut Frame, area: Rect) {
+    let area = centered_rect(60, 20, area);
+
+    let paragraph = Paragraph::new("No result!")
         .wrap(Wrap { trim: true })
         .block(
             Block::default()

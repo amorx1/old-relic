@@ -31,6 +31,7 @@ impl Default for Bounds {
 pub enum PayloadType {
     Timeseries(Payload),
     Log(LogPayload),
+    None, // No data
 }
 
 #[derive(Debug)]

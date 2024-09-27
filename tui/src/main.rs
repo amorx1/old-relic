@@ -142,15 +142,30 @@ async fn listen(
                         .to_nrql()
                         .map_or_else(|_| QueryType::Log(query.to_owned()), QueryType::Timeseries);
 
-                    let data = match q {
-                        QueryType::Timeseries(x) => PayloadType::Timeseries(
-                            query_timeseries(x, client.clone()).await.unwrap(),
-                        ),
-                        QueryType::Log(x) => {
-                            PayloadType::Log(query_log(x, client.clone()).await.unwrap())
+                    match q {
+                        QueryType::Timeseries(x) => {
+                            let result = query_timeseries(x, client.clone()).await;
+                            if let Ok(data) = result {
+                                if data.data.is_empty() {
+                                    data_tx.send(PayloadType::None);
+                                } else {
+                                    let payload = PayloadType::Timeseries(data);
+                                    data_tx.send(payload)?;
+                                }
+                            }
                         }
-                    };
-                    data_tx.send(data)?
+                        QueryType::Log(x) => {
+                            let result = query_log(x, client.clone()).await;
+                            if let Ok(data) = result {
+                                if data.logs.is_empty() {
+                                    data_tx.send(PayloadType::None)?;
+                                } else {
+                                    let payload = PayloadType::Log(data);
+                                    data_tx.send(payload)?;
+                                }
+                            }
+                        }
+                    }
                 }
                 UIEvent::DeleteQuery(query) => {
                     queries.remove(&query);
