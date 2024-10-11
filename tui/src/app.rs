@@ -1,6 +1,6 @@
 use crate::{
     backend::{Bounds, PayloadType, UIEvent},
-    dataset::{Dataset, Datasets, Logs},
+    dataset::{Data, Dataset, Datasets, Logs},
     input::Inputs,
     ui::ui,
     Config,
@@ -18,6 +18,8 @@ use std::{
     time::Duration,
 };
 use tokio::io;
+
+const ALL_COLUMN_SEARCH: &str = "SELECT * FROM Log WHERE allColumnSearch('$', insensitive: true)";
 
 pub struct UIFocus {
     pub tab: Tab,
@@ -76,10 +78,9 @@ pub struct App {
     pub tabs: Vec<String>,
     pub data_rx: Receiver<PayloadType>,
     pub ui_tx: CrossBeamSender<UIEvent>,
-    pub list_state: ListState,
-    pub datasets: Datasets,
+    // pub list_state: ListState,
+    pub data: Data,
     pub query_history: VecDeque<String>,
-    pub logs: Logs,
     pub facet_colours: BTreeMap<String, Color>,
 }
 
@@ -95,9 +96,7 @@ impl App {
             data_rx,
             ui_tx,
             focus: UIFocus::default(),
-            list_state: ListState::default(),
-            datasets: Datasets::new(),
-            logs: Logs::default(),
+            data: Data::default(),
             facet_colours: BTreeMap::default(),
             tabs: vec!["Logs".into()],
             query_history: VecDeque::default(),
@@ -155,7 +154,7 @@ impl App {
                             KeyCode::Char('r') => match self.focus.panel {
                                 Focus::QueryInput => {}
                                 _ => {
-                                    if !self.datasets.is_empty() {
+                                    if !self.data.timeseries.is_empty() {
                                         self.set_focus(UIFocus {
                                             panel: Focus::Rename,
                                             input_mode: InputMode::Input,
@@ -186,14 +185,16 @@ impl App {
                                     ..self.focus
                                 }),
                                 Focus::LogDetail => {
-                                    let key_idx = self.logs.log_item_list_state.selected().unwrap();
-                                    let log = &self.logs.selected().unwrap()[key_idx].to_string();
+                                    let key_idx =
+                                        self.data.logs.log_item_list_state.selected().unwrap();
+                                    let log =
+                                        &self.data.logs.selected().unwrap()[key_idx].to_string();
                                     let correlation_id = log
                                         .split(' ')
                                         .last()
                                         .unwrap()
                                         .trim_matches(|p| char::is_ascii_punctuation(&p));
-                                    let query = format!("SELECT * FROM Log WHERE allColumnSearch('{}', insensitive: true)", correlation_id);
+                                    let query = ALL_COLUMN_SEARCH.replace('$', correlation_id);
 
                                     self.add_query(query);
                                     self.set_focus(UIFocus {
@@ -224,7 +225,7 @@ impl App {
                                     }
                                     Focus::Rename => {
                                         self.rename_query(
-                                            self.datasets.selected.to_owned(),
+                                            self.data.timeseries.selected.to_owned(),
                                             self.inputs.get(Focus::Rename).to_owned(),
                                         );
                                     }
@@ -323,7 +324,8 @@ impl App {
                         ..self.focus
                     }),
                     PayloadType::Timeseries(payload) => {
-                        if let Entry::Vacant(e) = self.datasets.entry(payload.query.clone()) {
+                        if let Entry::Vacant(e) = self.data.timeseries.entry(payload.query.clone())
+                        {
                             e.insert(Dataset {
                                 query_alias: None,
                                 facets: payload.data,
@@ -333,7 +335,8 @@ impl App {
                             });
                         } else {
                             _ = self
-                                .datasets
+                                .data
+                                .timeseries
                                 .entry(payload.query.to_owned())
                                 .and_modify(|data| {
                                     data.facets = payload.data;
@@ -360,7 +363,7 @@ impl App {
                         }
 
                         if !logs.is_empty() {
-                            self.logs = Logs {
+                            self.data.logs = Logs {
                                 selected: logs.first_entry().unwrap().key().into(),
                                 logs,
                                 log_item_list_state: ListState::default(),
@@ -383,8 +386,8 @@ impl App {
 
     // TODO
     fn add_filter(&mut self, filter: String) {
-        self.logs.filters.insert(filter.clone());
-        self.logs.logs.retain(|_key, value| {
+        self.data.logs.filters.insert(filter.clone());
+        self.data.logs.logs.retain(|_key, value| {
             for line in value {
                 if line.contains(&filter) {
                     return true;
@@ -395,7 +398,7 @@ impl App {
     }
 
     fn rename_query(&mut self, query: String, alias: String) {
-        if let Entry::Vacant(e) = self.datasets.entry(query.to_owned()) {
+        if let Entry::Vacant(e) = self.data.timeseries.entry(query.to_owned()) {
             e.insert(Dataset {
                 has_data: false,
                 query_alias: Some(alias),
@@ -404,9 +407,13 @@ impl App {
                 selection: String::new(),
             });
         } else {
-            _ = self.datasets.entry(query.to_owned()).and_modify(|data| {
-                data.query_alias = Some(alias);
-            })
+            _ = self
+                .data
+                .timeseries
+                .entry(query.to_owned())
+                .and_modify(|data| {
+                    data.query_alias = Some(alias);
+                })
         }
     }
 
@@ -420,9 +427,9 @@ impl App {
     }
 
     pub fn delete_query(&mut self) {
-        let i = self.list_state.selected().unwrap();
+        let i = self.data.timeseries.list_state.selected().unwrap();
 
-        let removed = self.datasets.remove_entry(i);
+        let removed = self.data.timeseries.remove_entry(i);
         // TODO: Fix deleted queries reappearing on new data!
         _ = self.ui_tx.send(UIEvent::DeleteQuery(removed));
     }
@@ -430,13 +437,13 @@ impl App {
     pub fn next(&mut self) {
         match self.focus.tab {
             Tab::Graph => {
-                if self.datasets.is_empty() {
+                if self.data.timeseries.is_empty() {
                     return;
                 }
 
-                let i = match self.list_state.selected() {
+                let i = match self.data.timeseries.list_state.selected() {
                     Some(i) => {
-                        if i >= self.datasets.len() - 1 {
+                        if i >= self.data.timeseries.len() - 1 {
                             0
                         } else {
                             i + 1
@@ -445,18 +452,18 @@ impl App {
                     None => 0,
                 };
 
-                self.list_state.select(Some(i));
-                self.datasets.select(i);
+                self.data.timeseries.list_state.select(Some(i));
+                self.data.timeseries.select(i);
             }
             Tab::Logs => match self.focus.panel {
                 Focus::Log => {
-                    if self.logs.logs.is_empty() {
+                    if self.data.logs.is_empty() {
                         return;
                     }
 
-                    let i = match self.logs.log_item_list_state.selected() {
+                    let i = match self.data.logs.log_item_list_state.selected() {
                         Some(i) => {
-                            if i >= self.logs.selected().unwrap().len() - 1 {
+                            if i >= self.data.logs.selected().unwrap().len() - 1 {
                                 0
                             } else {
                                 i + 1
@@ -465,17 +472,17 @@ impl App {
                         None => 0,
                     };
 
-                    self.logs.log_item_list_state.select(Some(i));
+                    self.data.logs.log_item_list_state.select(Some(i));
                     // self.logs.select(i);
                 }
                 _ => {
-                    if self.logs.is_empty() {
+                    if self.data.logs.is_empty() {
                         return;
                     }
 
-                    let i = match self.logs.log_list_state.selected() {
+                    let i = match self.data.logs.log_list_state.selected() {
                         Some(i) => {
-                            if i >= self.logs.len() - 1 {
+                            if i >= self.data.logs.len() - 1 {
                                 0
                             } else {
                                 i + 1
@@ -484,8 +491,8 @@ impl App {
                         None => 0,
                     };
 
-                    self.logs.log_list_state.select(Some(i));
-                    self.logs.select(i);
+                    self.data.logs.log_list_state.select(Some(i));
+                    self.data.logs.select(i);
                 }
             },
         }
@@ -494,59 +501,59 @@ impl App {
     pub fn previous(&mut self) {
         match self.focus.tab {
             Tab::Graph => {
-                if self.datasets.is_empty() {
+                if self.data.timeseries.is_empty() {
                     return;
                 }
 
-                let i = match self.list_state.selected() {
+                let i = match self.data.timeseries.list_state.selected() {
                     Some(i) => {
                         if i == 0 {
-                            self.datasets.len() - 1
+                            self.data.timeseries.len() - 1
                         } else {
                             i - 1
                         }
                     }
                     None => 0,
                 };
-                self.list_state.select(Some(i));
-                self.datasets.select(i);
+                self.data.timeseries.list_state.select(Some(i));
+                self.data.timeseries.select(i);
             }
             Tab::Logs => match self.focus.panel {
                 Focus::Log => {
-                    if self.logs.logs.is_empty() {
+                    if self.data.logs.is_empty() {
                         return;
                     }
 
-                    let i = match self.logs.log_item_list_state.selected() {
+                    let i = match self.data.logs.log_item_list_state.selected() {
                         Some(i) => {
                             if i == 0 {
-                                self.logs.selected().unwrap().len() - 1
+                                self.data.logs.selected().unwrap().len() - 1
                             } else {
                                 i - 1
                             }
                         }
                         None => 0,
                     };
-                    self.logs.log_item_list_state.select(Some(i));
+                    self.data.logs.log_item_list_state.select(Some(i));
                     // self.logs.select(i);
                 }
                 _ => {
-                    if self.logs.is_empty() {
+                    if self.data.logs.is_empty() {
                         return;
                     }
 
-                    let i = match self.logs.log_list_state.selected() {
+                    let i = match self.data.logs.log_list_state.selected() {
                         Some(i) => {
                             if i == 0 {
-                                self.logs.len() - 1
+                                self.data.logs.len() - 1
                             } else {
                                 i - 1
                             }
                         }
                         None => 0,
                     };
-                    self.logs.log_list_state.select(Some(i));
-                    self.logs.select(i);
+                    self.data.logs.log_list_state.select(Some(i));
+                    self.data.logs.select(i);
                 }
             },
         }
@@ -589,7 +596,8 @@ impl App {
         let mut out = String::new();
 
         let timeseries_queries = self
-            .datasets
+            .data
+            .timeseries
             .iter()
             .map(|(q, data)| {
                 (
@@ -641,7 +649,7 @@ impl App {
     }
 
     fn clear_filters(&mut self) {
-        self.logs.filters.clear();
+        self.data.logs.filters.clear();
         self.add_query(
             self.query_history
                 .back()

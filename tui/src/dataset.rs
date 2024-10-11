@@ -8,6 +8,13 @@ use ratatui::{prelude::Line, widgets::ListState};
 
 use crate::backend::{Bounds, ChartData};
 
+#[derive(Default)]
+pub struct Data {
+    pub timeseries: Datasets,
+    pub logs: Logs,
+}
+
+#[derive(Default)]
 pub struct Dataset {
     pub has_data: bool,
     pub query_alias: Option<String>,
@@ -16,8 +23,10 @@ pub struct Dataset {
     pub selection: String,
 }
 
+#[derive(Default)]
 pub struct Datasets {
     pub datasets: BTreeMap<String, Dataset>,
+    pub list_state: ListState,
     pub selected: String,
 }
 
@@ -62,6 +71,7 @@ impl Logs {
 impl Datasets {
     pub fn new() -> Self {
         Datasets {
+            list_state: ListState::default(),
             datasets: BTreeMap::new(),
             selected: String::new(),
         }

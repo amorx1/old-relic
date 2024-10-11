@@ -61,7 +61,7 @@ pub fn ui(app: &mut App, frame: &mut Frame) {
                 | Focus::NoResult => {
                     render_query_box(app, frame, input_area);
                     render_query_list(app, frame, list_area);
-                    if let Some(dataset) = app.datasets.selected() {
+                    if let Some(dataset) = app.data.timeseries.selected() {
                         if dataset.has_data {
                             render_graph(app, frame, graph_area);
                         } else {
@@ -93,7 +93,7 @@ pub fn ui(app: &mut App, frame: &mut Frame) {
                 | Focus::LogDetail
                 | Focus::NoResult => {
                     render_query_box(app, frame, input_area);
-                    if !app.logs.is_empty() {
+                    if !app.data.logs.is_empty() {
                         render_log_list(app, frame, list_area);
                         render_barchart(app, frame, barchart_area);
                         render_seek(app, frame, seek_area);
@@ -149,8 +149,8 @@ pub fn style_detail_line<'a>(app: &App, value: String) -> Line<'a> {
         || (value.contains("severity.text") && value.contains("Error"))
     {
         Line::from(value).style(Style::default().bold().fg(Color::LightRed))
-    } else if !app.logs.filters.is_empty()
-        && value.contains(app.logs.filters.iter().next().unwrap())
+    } else if !app.data.logs.filters.is_empty()
+        && value.contains(app.data.logs.filters.iter().next().unwrap())
     {
         Line::from(value).style(Style::default().bg(Color::LightRed))
     } else {
@@ -159,7 +159,7 @@ pub fn style_detail_line<'a>(app: &App, value: String) -> Line<'a> {
 }
 
 pub fn render_seek(app: &mut App, frame: &mut Frame, area: Rect) {
-    let curr = app.logs.selected.clone().parse::<f64>().unwrap();
+    let curr = app.data.logs.selected.clone().parse::<f64>().unwrap();
     let vec = vec![(curr, 0.5)];
     let dataset = Dataset::default()
         .data(&vec)
@@ -167,7 +167,7 @@ pub fn render_seek(app: &mut App, frame: &mut Frame, area: Rect) {
         .style(Style::default().fg(app.config.theme.chart_fg))
         .graph_type(GraphType::Bar);
 
-    let bounds = app.logs.bounds;
+    let bounds = app.data.logs.bounds;
     let (min_x, _) = bounds.mins;
     let (max_x, _) = bounds.maxes;
 
@@ -204,28 +204,28 @@ pub fn render_seek(app: &mut App, frame: &mut Frame, area: Rect) {
 
 pub fn render_barchart(app: &mut App, frame: &mut Frame, area: Rect) {
     let error_dataset = Dataset::default()
-        .data(&app.logs.chart_data.error)
+        .data(&app.data.logs.chart_data.error)
         .marker(Marker::Block)
         .style(Style::default().red())
         .graph_type(GraphType::Bar);
     let debug_dataset = Dataset::default()
-        .data(&app.logs.chart_data.debug)
+        .data(&app.data.logs.chart_data.debug)
         .marker(Marker::Block)
         .style(Style::default().magenta())
         .graph_type(GraphType::Bar);
     let info_dataset = Dataset::default()
-        .data(&app.logs.chart_data.info)
+        .data(&app.data.logs.chart_data.info)
         .marker(Marker::Block)
         .style(Style::default().blue())
         .graph_type(GraphType::Bar);
 
-    let bounds = app.logs.bounds;
+    let bounds = app.data.logs.bounds;
     let (min_x, _) = bounds.mins;
     let (max_x, _) = bounds.maxes;
 
     let selected_date_time = DateTime::<Utc>::from_utc(
         NaiveDateTime::from_timestamp_opt(
-            app.logs.selected.clone().parse::<i64>().unwrap() / 1000,
+            app.data.logs.selected.clone().parse::<i64>().unwrap() / 1000,
             0,
         )
         .unwrap(),
@@ -298,8 +298,8 @@ pub fn render_barchart(app: &mut App, frame: &mut Frame, area: Rect) {
 
 pub fn render_log_detail(app: &mut App, frame: &mut Frame, area: Rect) {
     let area = centered_rect(60, 20, area);
-    let key_idx = app.logs.log_item_list_state.selected().unwrap();
-    let log = &app.logs.selected().unwrap()[key_idx];
+    let key_idx = app.data.logs.log_item_list_state.selected().unwrap();
+    let log = &app.data.logs.selected().unwrap()[key_idx];
 
     let paragraph = Paragraph::new(log.clone())
         .wrap(Wrap { trim: true })
@@ -332,6 +332,7 @@ pub fn render_no_result(app: &mut App, frame: &mut Frame, area: Rect) {
 
 pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
     let items = app
+        .data
         .logs
         .logs
         .iter()
@@ -361,14 +362,14 @@ pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
         .repeat_highlight_symbol(true);
 
     let mut scrollbar_state = ScrollbarState::default()
-        .content_length(app.logs.len())
-        .position(app.logs.log_list_state.selected().unwrap_or_default());
+        .content_length(app.data.logs.len())
+        .position(app.data.logs.log_list_state.selected().unwrap_or_default());
 
     let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
         .begin_symbol(None)
         .end_symbol(None);
 
-    frame.render_stateful_widget(list, area, &mut app.logs.log_list_state);
+    frame.render_stateful_widget(list, area, &mut app.data.logs.log_list_state);
     frame.render_stateful_widget(
         scrollbar,
         area.inner(Margin {
@@ -380,11 +381,11 @@ pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn apply_filter(app: &App, log_lines: &[String]) -> bool {
-    if app.logs.filters.is_empty() {
+    if app.data.logs.filters.is_empty() {
         return true;
     }
     for line in log_lines {
-        for filter in &app.logs.filters {
+        for filter in &app.data.logs.filters {
             if line.contains(filter) {
                 return true;
             }
@@ -395,7 +396,7 @@ pub fn apply_filter(app: &App, log_lines: &[String]) -> bool {
 }
 
 pub fn render_log(app: &mut App, frame: &mut Frame, area: Rect) {
-    let logs = app.logs.clone();
+    let logs = app.data.logs.clone();
     let default = vec![]; // TODO??
     let lines = logs
         .selected()
@@ -422,7 +423,7 @@ pub fn render_log(app: &mut App, frame: &mut Frame, area: Rect) {
         .highlight_symbol(">>")
         .repeat_highlight_symbol(true);
 
-    frame.render_stateful_widget(list, area, &mut app.logs.log_item_list_state);
+    frame.render_stateful_widget(list, area, &mut app.data.logs.log_item_list_state);
 }
 
 pub fn render_tabs(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -509,7 +510,7 @@ pub fn render_save_session(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_dashboard(app: &mut App, frame: &mut Frame, area: Rect) {
-    let n_graphs = &app.datasets.len();
+    let n_graphs = &app.data.timeseries.len();
     let areas = match n_graphs {
         0 => vec![],
         1 => vec![area],
@@ -536,7 +537,7 @@ pub fn render_dashboard(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) {
-    let datasets = app.datasets.iter().nth(i).map(|(_, data)| {
+    let datasets = app.data.timeseries.iter().nth(i).map(|(_, data)| {
         data.facets
             .iter()
             .map(|(facet, points)| {
@@ -553,7 +554,8 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
     match datasets {
         Some(datasets) => {
             let (_, dataset) = app
-                .datasets
+                .data
+                .timeseries
                 .iter()
                 .nth(i)
                 .expect("ERROR: Could not index bounds!");
@@ -651,7 +653,8 @@ pub fn render_rename_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
 
 pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
     let items = app
-        .datasets
+        .data
+        .timeseries
         .iter()
         .map(|(query, data)| match &data.query_alias {
             Some(alias) => alias.to_owned(),
@@ -673,7 +676,7 @@ pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
         .highlight_symbol(">>")
         .repeat_highlight_symbol(true);
 
-    frame.render_stateful_widget(list, area, &mut app.list_state);
+    frame.render_stateful_widget(list, area, &mut app.data.timeseries.list_state);
 }
 
 pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -692,7 +695,7 @@ pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
-    let datasets = app.datasets.selected().map(|data| {
+    let datasets = app.data.timeseries.selected().map(|data| {
         data.facets
             .iter()
             .map(|(facet, points)| {
@@ -708,7 +711,8 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
 
     if let Some(datasets) = datasets {
         let dataset = app
-            .datasets
+            .data
+            .timeseries
             .selected()
             .expect("ERROR: No bounds found for selected query");
 
