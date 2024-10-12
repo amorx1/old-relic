@@ -1,12 +1,12 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 
 use ratatui::{
+    layout::Flex,
     prelude::*,
     symbols::Marker,
     widgets::{
-        Axis, Bar, BarChart, BarGroup, Block, BorderType, Borders, Chart, Clear, Dataset,
-        GraphType, LegendPosition, List, Padding, Paragraph, RenderDirection, Scrollbar,
-        ScrollbarOrientation, ScrollbarState, Sparkline, Tabs, Wrap,
+        Axis, Block, BorderType, Borders, Chart, Clear, Dataset, GraphType, LegendPosition, List,
+        Padding, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Tabs, Wrap,
     },
 };
 use style::palette::tailwind;
@@ -120,7 +120,7 @@ pub fn ui(app: &mut App, frame: &mut Frame) {
 }
 
 pub fn render_search(app: &mut App, frame: &mut Frame, area: Rect) {
-    let area = centered_rect(60, 20, area);
+    let area = center(Constraint::Ratio(1, 2), Constraint::Ratio(1, 2), area);
     let vertical = Layout::vertical([Constraint::Length(3), Constraint::Length(3)]);
     let [prompt_area, input_area] = vertical.areas(area);
 
@@ -297,7 +297,7 @@ pub fn render_barchart(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_log_detail(app: &mut App, frame: &mut Frame, area: Rect) {
-    let area = centered_rect(60, 20, area);
+    let area = center(Constraint::Ratio(1, 2), Constraint::Ratio(1, 2), area);
     let key_idx = app.data.logs.log_item_list_state.selected().unwrap();
     let log = &app.data.logs.selected().unwrap()[key_idx];
 
@@ -315,7 +315,7 @@ pub fn render_log_detail(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_no_result(app: &mut App, frame: &mut Frame, area: Rect) {
-    let area = centered_rect(60, 20, area);
+    let area = center(Constraint::Ratio(1, 2), Constraint::Ratio(1, 2), area);
 
     let paragraph = Paragraph::new("No result!")
         .wrap(Wrap { trim: true })
@@ -336,7 +336,6 @@ pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
         .logs
         .logs
         .iter()
-        // .keys()
         .filter(|(_, v)| apply_filter(app, v))
         .map(|(k, _)| k.to_owned())
         .collect::<Vec<String>>();
@@ -450,12 +449,12 @@ pub fn render_splash(app: &mut App, frame: &mut Frame, area: Rect) {
         .lines(vec!["Old Relic".fg(app.config.theme.focus_fg).into()])
         .build();
 
-    let center = centered_rect(60, 60, area);
+    let center = center(Constraint::Ratio(1, 2), Constraint::Ratio(1, 2), area);
     frame.render_widget(dummy, center);
 }
 
 pub fn render_loading(app: &mut App, frame: &mut Frame, area: Rect) {
-    let center = centered_rect(5, 5, area);
+    let center = center(Constraint::Ratio(1, 2), Constraint::Ratio(1, 2), area);
     let throbber = throbber_widgets_tui::Throbber::default()
         .label("Loading data...")
         .style(Style::default().fg(app.config.theme.focus_fg))
@@ -465,7 +464,7 @@ pub fn render_loading(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_load_session(app: &mut App, frame: &mut Frame, area: Rect) {
-    let area = centered_rect(60, 20, area);
+    let area = center(Constraint::Ratio(1, 2), Constraint::Ratio(1, 2), area);
     let vertical = Layout::vertical([Constraint::Length(3), Constraint::Length(3)]);
     let [prompt_area, input_area] = vertical.areas(area);
 
@@ -488,7 +487,7 @@ pub fn render_load_session(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_save_session(app: &mut App, frame: &mut Frame, area: Rect) {
-    let area = centered_rect(60, 20, area);
+    let area = center(Constraint::Ratio(1, 2), Constraint::Ratio(1, 2), area);
     let vertical = Layout::vertical([Constraint::Length(3), Constraint::Length(3)]);
     let [prompt_area, input_area] = vertical.areas(area);
 
@@ -623,14 +622,14 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
                 .lines(vec!["Old Relic".fg(app.config.theme.focus_fg).into()])
                 .build();
 
-            let center = centered_rect(30, 30, area);
+            let center = center(Constraint::Ratio(1, 2), Constraint::Ratio(1, 2), area);
             frame.render_widget(dummy, center);
         }
     }
 }
 
 pub fn render_rename_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
-    let area = centered_rect(60, 20, area);
+    let area = center(Constraint::Ratio(1, 2), Constraint::Ratio(1, 2), area);
     let vertical = Layout::vertical([Constraint::Length(3), Constraint::Length(3)]);
     let [prompt_area, input_area] = vertical.areas(area);
 
@@ -666,7 +665,7 @@ pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .title("Active Queries"),
+                .title("[ Active Queries ]"),
         )
         .highlight_style(
             Style::new()
@@ -767,7 +766,6 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(app.config.theme.chart_fg))
                     .border_type(BorderType::Thick)
                     .border_type(BorderType::Rounded),
             )
@@ -779,18 +777,23 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
     // frame.render_widget(chart, frame.size());
 }
 
-pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::vertical([
-        Constraint::Percentage((100 - percent_y) / 2),
-        Constraint::Percentage(percent_y),
-        Constraint::Percentage((100 - percent_y) / 2),
-    ])
-    .split(r);
+pub fn center(horizontal: Constraint, vertical: Constraint, area: Rect) -> Rect {
+    let [area] = Layout::horizontal([horizontal])
+        .flex(Flex::Center)
+        .areas(area);
+    let [area] = Layout::vertical([vertical]).flex(Flex::Center).areas(area);
+    area
+    // let popup_layout = Layout::vertical([
+    //     Constraint::Percentage((100 - percent_y) / 2),
+    //     Constraint::Percentage(percent_y),
+    //     Constraint::Percentage((100 - percent_y) / 2),
+    // ])
+    // .split(r);
 
-    Layout::horizontal([
-        Constraint::Percentage((100 - percent_x) / 2),
-        Constraint::Percentage(percent_x),
-        Constraint::Percentage((100 - percent_x) / 2),
-    ])
-    .split(popup_layout[1])[1]
+    // Layout::horizontal([
+    //     Constraint::Percentage((100 - percent_x) / 2),
+    //     Constraint::Percentage(percent_x),
+    //     Constraint::Percentage((100 - percent_x) / 2),
+    // ])
+    // .split(popup_layout[1])[1]
 }

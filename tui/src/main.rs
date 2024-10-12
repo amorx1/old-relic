@@ -37,7 +37,7 @@ use std::{
     sync::mpsc::{channel, Sender},
 };
 
-const DEFAULT_THEME: &str = "5";
+const DEFAULT_THEME: &str = "6";
 const NEW_RELIC_ENDPOINT: &str = "https://api.newrelic.com/graphql";
 
 pub struct Config {
@@ -142,7 +142,7 @@ async fn listen(
 
                 match query {
                     Ok(QueryType::Timeseries(q)) => {
-                        info!("Dispatching Timeseries query: {}", &q.to_string().unwrap());
+                        info!("Dispatching Timeseries query: {}", &q.to_string()?);
 
                         let result = query_timeseries(q, client.clone()).await;
                         if let Ok(data) = result {
@@ -155,7 +155,7 @@ async fn listen(
                         }
                     }
                     Ok(QueryType::Log(q)) => {
-                        info!("Dispatching Log query: {}", &q.to_string().unwrap());
+                        info!("Dispatching Log query: {}", &q.to_string()?);
 
                         let result = query_log(q.to_string()?, client.clone()).await;
                         if let Ok(data) = result {

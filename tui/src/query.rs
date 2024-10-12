@@ -1,4 +1,5 @@
 use anyhow::Result;
+use log::debug;
 use serde::Deserialize;
 
 use crate::parser::parse_nrql;
@@ -53,11 +54,14 @@ impl NRQLQuery {
         })
     }
     pub fn to_string(&self) -> Result<String> {
+        debug!("{self:?}");
+
         let mut query = String::new();
         query += format!("SELECT {}", self.select).as_str();
 
-        if self.mode == Some("TIMSERIES".into()) {
+        if self.mode.as_ref().is_some_and(|v| v == "TIMESERIES") {
             query += " as value";
+            debug!("Added 'as value' to query -> {query:?}");
         }
 
         query += format!(" FROM {}", self.from).as_str();
