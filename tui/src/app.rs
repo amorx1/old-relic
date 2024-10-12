@@ -1,13 +1,15 @@
 use crate::{
     backend::{Bounds, PayloadType, UIEvent},
-    dataset::{Data, Dataset, Datasets, Logs},
+    dataset::{Data, Dataset, Logs},
     input::Inputs,
     ui::ui,
     Config,
 };
 
+use anyhow::Result;
 use crossbeam_channel::{Receiver as CrossBeamReceiver, Sender as CrossBeamSender};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use log::{debug, error, info};
 use rand::{thread_rng, Rng};
 use ratatui::{backend::Backend, style::Color, widgets::ListState, Terminal};
 use std::{
@@ -19,8 +21,10 @@ use std::{
 };
 use tokio::io;
 
-const ALL_COLUMN_SEARCH: &str = "SELECT * FROM Log WHERE allColumnSearch('$', insensitive: true)";
+pub const ALL_COLUMN_SEARCH: &str =
+    "SELECT * FROM Log WHERE allColumnSearch('$', insensitive: true)";
 
+#[derive(Debug)]
 pub struct UIFocus {
     pub tab: Tab,
     pub panel: Focus,
@@ -40,7 +44,7 @@ impl Default for UIFocus {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Focus {
     QueryInput = 0,
     Rename = 1,
@@ -54,7 +58,7 @@ pub enum Focus {
     NoResult = 9,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum InputMode {
     Normal,
     Input,
@@ -65,7 +69,7 @@ pub struct Theme {
     pub chart_fg: Color,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Tab {
     Graph = 0,
     Logs = 1,
@@ -241,7 +245,10 @@ impl App {
                                         match self.inputs.get(Focus::SessionLoad) {
                                             // Load session
                                             "y" | "Y" => {
-                                                self.load_session();
+                                                self.load_session().map_err(|e| {
+                                                    error!("{}", e);
+                                                    self.config.session.is_loaded = true;
+                                                });
                                             }
                                             // Don't load session
                                             _ => {
@@ -258,7 +265,7 @@ impl App {
                                         match self.inputs.get(Focus::SessionSave) {
                                             // Save session
                                             "y" | "Y" => {
-                                                self.save_session();
+                                                self.save_session().map_err(|e| error!("{}", e));
                                             }
                                             _ => {}
                                         }
@@ -324,8 +331,11 @@ impl App {
                         ..self.focus
                     }),
                     PayloadType::Timeseries(payload) => {
+                        info!("Received payload from backend of type: TimeseriesPayload");
+
                         if let Entry::Vacant(e) = self.data.timeseries.entry(payload.query.clone())
                         {
+                            // New query
                             e.insert(Dataset {
                                 query_alias: None,
                                 facets: payload.data,
@@ -334,10 +344,11 @@ impl App {
                                 has_data: true,
                             });
                         } else {
+                            // Update data for existing query
                             _ = self
                                 .data
                                 .timeseries
-                                .entry(payload.query.to_owned())
+                                .entry(payload.query)
                                 .and_modify(|data| {
                                     data.facets = payload.data;
                                     data.bounds = payload.bounds;
@@ -355,8 +366,16 @@ impl App {
                                 ));
                             }
                         }
+
+                        self.set_focus(UIFocus {
+                            loading: false,
+                            tab: Tab::Graph,
+                            ..self.focus
+                        });
                     }
                     PayloadType::Log(payload) => {
+                        info!("Received payload from backend of type: LogPayload");
+
                         let mut logs: BTreeMap<String, Vec<String>> = BTreeMap::new();
                         for (timestamp, log) in payload.logs {
                             logs.insert(timestamp, log.split('\n').map(|v| v.into()).collect());
@@ -376,6 +395,7 @@ impl App {
 
                         self.set_focus(UIFocus {
                             loading: false,
+                            tab: Tab::Logs,
                             ..self.focus
                         });
                     }
@@ -384,8 +404,9 @@ impl App {
         }
     }
 
-    // TODO
     fn add_filter(&mut self, filter: String) {
+        info!("Filtering logs by: {}", &filter);
+
         self.data.logs.filters.insert(filter.clone());
         self.data.logs.logs.retain(|_key, value| {
             for line in value {
@@ -398,6 +419,8 @@ impl App {
     }
 
     fn rename_query(&mut self, query: String, alias: String) {
+        info!("Renaming query: {} -> {}", &query, &alias);
+
         if let Entry::Vacant(e) = self.data.timeseries.entry(query.to_owned()) {
             e.insert(Dataset {
                 has_data: false,
@@ -423,6 +446,7 @@ impl App {
     }
 
     pub fn set_focus(&mut self, focus: UIFocus) {
+        debug!("Updated focus: {focus:?}");
         self.focus = focus;
     }
 
@@ -559,14 +583,20 @@ impl App {
         }
     }
 
-    pub fn load_session(&mut self) {
+    pub fn load_session(&mut self) -> Result<()> {
         let session_path = self.config.session.session_path.clone();
-        let yaml = fs::read_to_string(session_path).expect("ERROR: Could not read session file!");
-        let session_queries: Vec<String> =
-            serde_yaml::from_str(&yaml).expect("ERROR: Could not deserialize session file!");
+        let yaml = fs::read_to_string(session_path)?;
+        let session_queries: Vec<String> = serde_yaml::from_str(&yaml)?;
+
+        info!(
+            "Successfully loaded session: {} queries",
+            &session_queries.len()
+        );
 
         self.query_history = VecDeque::from(session_queries);
         self.config.session.is_loaded = true;
+
+        Ok(())
     }
     // pub fn load_session(&mut self) {
     //     let session_path = self.config.session.session_path.clone();
@@ -592,7 +622,7 @@ impl App {
     //     self.config.session.is_loaded = true;
     // }
 
-    pub fn save_session(&self) {
+    pub fn save_session(&self) -> Result<()> {
         let mut out = String::new();
 
         let timeseries_queries = self
@@ -608,14 +638,12 @@ impl App {
             .collect::<BTreeMap<String, String>>();
 
         if !timeseries_queries.is_empty() {
-            let yaml: String = serde_yaml::to_string(&timeseries_queries)
-                .expect("ERROR: Could not serialize queries!");
+            let yaml: String = serde_yaml::to_string(&timeseries_queries)?;
 
             out += &yaml;
         }
 
-        let log_queries = serde_yaml::to_string(&self.query_history)
-            .expect("ERROR: Could not serialize query history!");
+        let log_queries = serde_yaml::to_string(&self.query_history)?;
 
         out += &log_queries;
 
@@ -625,10 +653,11 @@ impl App {
             .write(true)
             .truncate(true)
             .create(true)
-            .open(session_path)
-            .expect("ERROR: Could not open session file!");
-        file.write_all(out.as_bytes())
-            .expect("ERROR: Could not write to session file!");
+            .open(session_path)?;
+        file.write_all(out.as_bytes())?;
+
+        info!("Successfully saved session");
+        Ok(())
     }
 
     fn previous_tab(&mut self) {
@@ -643,8 +672,8 @@ impl App {
         // TODO: Handle n tabs
         match self.focus.tab {
             Tab::Graph => self.focus.tab = Tab::Logs,
-            // Tab::Logs => self.focus.tab = Tab::Graph,
-            Tab::Logs => self.focus.tab = Tab::Logs,
+            Tab::Logs => self.focus.tab = Tab::Graph,
+            // Tab::Logs => self.focus.tab = Tab::Logs,
         }
     }
 

@@ -4,7 +4,7 @@ use std::{
     vec::Vec,
 };
 
-use ratatui::{prelude::Line, widgets::ListState};
+use ratatui::widgets::ListState;
 
 use crate::backend::{Bounds, ChartData};
 

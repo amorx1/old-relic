@@ -6,37 +6,79 @@ use crate::parser::parse_nrql;
 #[derive(Debug, Deserialize, Clone)]
 pub enum QueryType {
     Timeseries(NRQLQuery),
-    Log(String),
+    Log(NRQLQuery),
 }
 
-pub struct NRQLResult {}
+impl QueryType {
+    pub fn from(nrql: NRQLQuery) -> Self {
+        match nrql.mode {
+            Some(_) => QueryType::Timeseries(nrql),
+            None => QueryType::Log(nrql),
+        }
+    }
+}
 
 #[derive(Default, Debug, Deserialize, Clone)]
 pub struct NRQLQuery {
     pub from: String,
     pub select: String,
     pub r#where: String,
-    pub facet: String,
-    pub since: String,
-    pub until: String,
-    pub limit: String,
-    pub mode: String,
+    pub facet: Option<String>,
+    pub since: Option<String>,
+    pub until: Option<String>,
+    pub limit: Option<String>,
+    pub mode: Option<String>,
 }
 
 impl NRQLQuery {
+    pub fn from_captures(captures: regex::Captures) -> Result<Self> {
+        Ok(NRQLQuery {
+            from: match captures.name("from") {
+                Some(m) => m.as_str().to_string(),
+                None => panic!(),
+            },
+            select: match captures.name("select") {
+                Some(m) => m.as_str().to_string(),
+                None => panic!(),
+            },
+            r#where: match captures.name("where") {
+                Some(m) => m.as_str().to_string(),
+                None => panic!(),
+            },
+            facet: captures.name("facet").map(|m| m.as_str().to_string()),
+            since: captures.name("since").map(|m| m.as_str().to_string()),
+            until: captures.name("until").map(|m| m.as_str().to_string()),
+            limit: captures.name("limit").map(|m| m.as_str().to_string()),
+            mode: captures.name("mode").map(|m| m.as_str().to_string()),
+        })
+    }
     pub fn to_string(&self) -> Result<String> {
         let mut query = String::new();
-        query += format!("FROM {} ", self.from).as_str();
-        // TODO: Fix 'as value' duplication on save/load session
-        query += format!("SELECT {} as value ", self.select).as_str();
-        query += format!("WHERE {} ", self.r#where).as_str();
-        if !String::is_empty(&self.facet) {
-            query += format!("FACET {} ", self.facet).as_str();
+        query += format!("SELECT {}", self.select).as_str();
+
+        if self.mode == Some("TIMSERIES".into()) {
+            query += " as value";
         }
-        query += format!("SINCE {} ", self.since).as_str();
-        query += format!("UNTIL {} ", self.until).as_str();
-        query += format!("LIMIT {} ", self.limit).as_str();
-        query += self.mode.to_string().as_str();
+
+        query += format!(" FROM {}", self.from).as_str();
+        // TODO: Fix 'as value' duplication on save/load session
+        query += format!(" WHERE {}", self.r#where).as_str();
+        if let Some(facet) = &self.facet {
+            query += format!(" FACET {}", facet).as_str();
+        }
+        if let Some(since) = &self.since {
+            query += format!(" since {}", since).as_str();
+        }
+        if let Some(until) = &self.until {
+            query += format!(" until {}", until).as_str();
+        }
+        if let Some(limit) = &self.limit {
+            query += format!(" limit {}", limit).as_str();
+        }
+        if let Some(mode) = &self.mode {
+            query += " ";
+            query += mode.to_string().as_str();
+        }
 
         Ok(query.to_string())
     }
@@ -44,20 +86,7 @@ impl NRQLQuery {
 
 impl NRQL for &str {
     fn to_nrql(self) -> Result<NRQLQuery> {
-        let parts = parse_nrql(self)?;
-        let mut nrql = NRQLQuery::default();
-        parts.iter().for_each(|(key, value)| match key.as_ref() {
-            "FROM" => nrql.from = value.to_owned(),
-            "SELECT" => nrql.select = value.to_owned(),
-            "WHERE" => nrql.r#where = value.to_owned(),
-            "FACET" => nrql.facet = value.to_owned(),
-            "SINCE" => nrql.since = value.to_owned(),
-            "UNTIL" => nrql.until = value.to_owned(),
-            "LIMIT" => nrql.limit = value.to_owned(),
-            "MODE" => nrql.mode = value.to_owned(),
-            _ => panic!(),
-        });
-        Ok(nrql)
+        parse_nrql(self)
     }
 }
 

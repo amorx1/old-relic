@@ -29,7 +29,7 @@ impl Default for Bounds {
 
 #[derive(Debug)]
 pub enum PayloadType {
-    Timeseries(Payload),
+    Timeseries(TimseriesPayload),
     Log(LogPayload),
     None, // No data
 }
@@ -45,7 +45,7 @@ pub struct LogPayload {
 pub struct Bins {}
 
 #[derive(Default, Debug)]
-pub struct Payload {
+pub struct TimseriesPayload {
     pub query: String,
     pub facets: Vec<String>,
     pub data: BTreeMap<String, Vec<(f64, f64)>>,
@@ -63,7 +63,6 @@ pub struct Backend {
 }
 
 pub enum UIEvent {
-    RefreshData,
     AddQuery(String),
     DeleteQuery(String),
 }
@@ -165,7 +164,10 @@ pub async fn query_log(query: String, client: NewRelicClient) -> Result<LogPaylo
     })
 }
 
-pub async fn query_timeseries(query: NRQLQuery, client: NewRelicClient) -> Result<Payload, Error> {
+pub async fn query_timeseries(
+    query: NRQLQuery,
+    client: NewRelicClient,
+) -> Result<TimseriesPayload, Error> {
     let data = client
         .query::<TimeseriesResult>(query.to_string().unwrap())
         .await
@@ -201,7 +203,7 @@ pub async fn query_timeseries(query: NRQLQuery, client: NewRelicClient) -> Resul
         }
     }
 
-    Ok(Payload {
+    Ok(TimseriesPayload {
         query: query.to_string().unwrap(),
         facets: facet_keys,
         data: facets,

@@ -2,3 +2,5 @@
 client/target
 server/target
 tui/target
+tui/app.log
+**/*.cast

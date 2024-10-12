@@ -1,5 +1,6 @@
 use crate::query::QueryResponse;
 use anyhow::{anyhow, Error};
+use log::{debug, error};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, ClientBuilder, Method,
@@ -75,10 +76,12 @@ impl NewRelicClient {
             .await;
 
         if let Ok(data) = response {
-            let json = data
-                .json::<QueryResponse<T>>()
-                .await
-                .map_err(|e| anyhow!(e))?;
+            debug!("Received response from New Relic: {}", data.status());
+
+            let json = data.json::<QueryResponse<T>>().await.map_err(|e| {
+                error!("Error deserializing response from New Relic!");
+                anyhow!(e)
+            })?;
 
             return Ok(json.data.actor.account.nrql.results);
         }
