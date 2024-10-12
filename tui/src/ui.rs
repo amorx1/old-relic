@@ -351,7 +351,7 @@ pub fn render_log_list(app: &mut App, frame: &mut Frame, area: Rect) {
                 } else {
                     Color::White
                 }))
-                .title("[Timestamps]".bold()),
+                .title("[ Timestamps ]".bold()),
         )
         .highlight_style(
             Style::new()
@@ -413,7 +413,7 @@ pub fn render_log(app: &mut App, frame: &mut Frame, area: Rect) {
                 } else {
                     Color::White
                 }))
-                .title("[Log]".bold()),
+                .title("[ Log ]".bold()),
         )
         .highlight_style(
             Style::new()
@@ -689,7 +689,7 @@ pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .title("[Query]".bold()),
+                .title("[ Query ]".bold()),
         );
     frame.render_widget(input, area);
 }
