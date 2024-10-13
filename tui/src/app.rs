@@ -86,6 +86,7 @@ pub struct App {
     pub data: Data,
     pub query_history: VecDeque<String>,
     pub facet_colours: BTreeMap<String, Color>,
+    pub redraw: bool,
 }
 
 impl App {
@@ -104,13 +105,21 @@ impl App {
             facet_colours: BTreeMap::default(),
             tabs: vec!["Logs".into()],
             query_history: VecDeque::default(),
+            redraw: true,
         }
     }
 
     pub fn run<B: Backend>(mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
         let mut rng = thread_rng();
         loop {
-            terminal.draw(|f| ui(&mut self, f))?;
+            if self.redraw ||
+                // TODO: Currently redrawing on each tick to keep graph live, should be on an interval
+                (!self.data.timeseries.is_empty() && self.focus.tab == Tab::Graph)
+            {
+                terminal.draw(|f| ui(&mut self, f))?;
+            }
+
+            self.redraw = false;
 
             // Session Load
             if !self.config.session.is_loaded {
@@ -119,6 +128,7 @@ impl App {
                     input_mode: InputMode::Input,
                     ..self.focus
                 });
+                self.redraw = true;
             }
 
             // Event handlers
@@ -193,14 +203,14 @@ impl App {
                                         self.data.logs.log_item_list_state.selected().unwrap();
                                     let log =
                                         &self.data.logs.selected().unwrap()[key_idx].to_string();
-                                    let correlation_id = log
+                                    let value = log
                                         .split(' ')
                                         .last()
                                         .unwrap()
                                         .trim_matches(|p| char::is_ascii_punctuation(&p));
-                                    let query = ALL_COLUMN_SEARCH.replace('$', correlation_id);
+                                    // let query = ALL_COLUMN_SEARCH.replace('$', correlation_id);
 
-                                    self.add_query(query);
+                                    self.add_query(value.to_owned());
                                     self.set_focus(UIFocus {
                                         panel: Focus::Default,
                                         ..self.focus
@@ -247,14 +257,12 @@ impl App {
                                             "y" | "Y" => {
                                                 self.load_session().map_err(|e| {
                                                     error!("{}", e);
-                                                    self.config.session.is_loaded = true;
                                                 });
                                             }
                                             // Don't load session
-                                            _ => {
-                                                self.config.session.is_loaded = true;
-                                            }
+                                            _ => {}
                                         }
+                                        self.config.session.is_loaded = true;
                                         // Update focus to default
                                         self.set_focus(UIFocus {
                                             panel: Focus::Default,
@@ -320,6 +328,8 @@ impl App {
                         },
                         _ => {}
                     }
+                    // On any key event, we probably want to redraw
+                    self.redraw = true;
                 }
             }
 
@@ -400,6 +410,9 @@ impl App {
                         });
                     }
                 }
+
+                // Redraw on new data
+                self.redraw = true;
             }
         }
     }
@@ -446,7 +459,6 @@ impl App {
     }
 
     pub fn set_focus(&mut self, focus: UIFocus) {
-        debug!("Updated focus: {focus:?}");
         self.focus = focus;
     }
 
@@ -598,29 +610,6 @@ impl App {
 
         Ok(())
     }
-    // pub fn load_session(&mut self) {
-    //     let session_path = self.config.session.session_path.clone();
-    //     let yaml = fs::read_to_string(session_path).expect("ERROR: Could not read session file!");
-    //     let session_queries: Option<BTreeMap<String, String>> =
-    //         serde_yaml::from_str(&yaml).expect("ERROR: Could not deserialize session file!");
-
-    //     dbg!(&session_queries);
-
-    //     if let Some(queries) = session_queries {
-    //         let iter = queries.into_iter();
-    //         for (alias, query) in iter {
-    //             // TODO: Avoid this
-    //             let clean_query = query.replace("as value", "");
-    //             if let Ok(parsed_query) = clean_query.trim().to_nrql() {
-    //                 // TODO: Handle Log session
-    //                 self.add_query(query);
-    //                 self.rename_query(parsed_query.to_string().unwrap(), alias);
-    //             }
-    //         }
-    //     }
-
-    //     self.config.session.is_loaded = true;
-    // }
 
     pub fn save_session(&self) -> Result<()> {
         let mut out = String::new();
@@ -638,7 +627,8 @@ impl App {
             .collect::<BTreeMap<String, String>>();
 
         if !timeseries_queries.is_empty() {
-            let yaml: String = serde_yaml::to_string(&timeseries_queries)?;
+            let yaml: String =
+                serde_yaml::to_string(&timeseries_queries.values().collect::<Vec<_>>())?;
 
             out += &yaml;
         }

@@ -8,24 +8,27 @@ pub mod query;
 mod session;
 mod ui;
 
-use anyhow::{anyhow, Error, Result};
-use app::{App, Theme};
+use anyhow::{Error, Result};
+use app::{App, Theme, ALL_COLUMN_SEARCH};
 use backend::{query_log, query_timeseries, PayloadType, UIEvent};
-use chrono::Offset;
+
 use client::NewRelicClient;
 use crossbeam_channel::{unbounded, Receiver as CrossBeamReceiver, Sender as CrossBeamSender};
 use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use log::{error, info, warn, LevelFilter};
+use log::{debug, error, info, warn, LevelFilter};
 use query::{QueryType, NRQL};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use reqwest::Client;
 use session::Session;
-use simplelog::{Config as LogConfig, ConfigBuilder, Level, WriteLogger};
-use std::fs::File;
-use tokio::{runtime, time};
+use simplelog::{ConfigBuilder, WriteLogger};
+use std::{fs::File, time::Duration};
+use tokio::{
+    join, runtime, select,
+    time::{self, interval, sleep},
+};
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 use ui::PALETTES;
 
@@ -37,7 +40,7 @@ use std::{
     sync::mpsc::{channel, Sender},
 };
 
-const DEFAULT_THEME: &str = "6";
+const DEFAULT_THEME: &str = "4";
 const NEW_RELIC_ENDPOINT: &str = "https://api.newrelic.com/graphql";
 
 pub struct Config {
@@ -100,7 +103,7 @@ fn main() -> io::Result<()> {
             terminal.show_cursor()?;
 
             let backend = runtime::Builder::new_multi_thread()
-                .worker_threads(1)
+                .worker_threads(2)
                 .thread_name("data")
                 .enable_all()
                 .build()?;
@@ -110,9 +113,23 @@ fn main() -> io::Result<()> {
                 // Query events
                 let newrelic_client = newrelic_client.clone();
                 let data_tx = data_tx.clone();
-                let _ui_tx = ui_tx.clone();
+                let ui_tx = ui_tx.clone();
+
                 backend.spawn(async move {
+                    info!("Starting listener");
                     _ = listen(newrelic_client, data_tx, ui_rx).await;
+                });
+
+                // Refresh events
+                backend.spawn(async move {
+                    let mut stream = IntervalStream::new(time::interval(Duration::from_secs(10)));
+                    while let Some(_ts) = stream.next().await {
+                        info!("Sending UI::RefreshQuery command!");
+
+                        if ui_tx.send(UIEvent::RefreshQuery).is_err() {
+                            warn!("Sending command UIEvent::RefreshQuery to UI failed!");
+                        }
+                    }
                 });
             }
 
@@ -138,9 +155,9 @@ async fn listen(
         match event {
             UIEvent::AddQuery(query) => {
                 queries.insert(query.to_owned());
-                let query = query.to_nrql().map(QueryType::from);
+                let parsed_query = query.to_nrql().map(QueryType::from);
 
-                match query {
+                match parsed_query {
                     Ok(QueryType::Timeseries(q)) => {
                         info!("Dispatching Timeseries query: {}", &q.to_string()?);
 
@@ -167,7 +184,74 @@ async fn listen(
                             }
                         }
                     }
-                    Err(e) => panic!("{}", e),
+                    Err(e) => {
+                        // If the query cannot be parsed, try perform a case-insensitive global search for the search term
+                        warn!("{}. Attempting all column search...", e);
+
+                        let search_query = ALL_COLUMN_SEARCH.replace('$', &query).to_nrql()?;
+                        let result = query_log(search_query.to_string()?, client.clone()).await;
+
+                        if let Ok(data) = result {
+                            if data.logs.is_empty() {
+                                data_tx.send(PayloadType::None)?;
+                            } else {
+                                let payload = PayloadType::Log(data);
+                                data_tx.send(payload)?;
+                            }
+                        }
+                    }
+                }
+            }
+            UIEvent::RefreshQuery => {
+                info!("Refreshing queries!");
+
+                for query in &queries {
+                    let parsed_query = query.to_nrql().map(QueryType::from);
+
+                    match parsed_query {
+                        Ok(QueryType::Timeseries(q)) => {
+                            info!("Dispatching Timeseries query: {}", &q.to_string()?);
+
+                            let result = query_timeseries(q, client.clone()).await;
+                            if let Ok(data) = result {
+                                if data.data.is_empty() {
+                                    data_tx.send(PayloadType::None)?;
+                                } else {
+                                    let payload = PayloadType::Timeseries(data);
+                                    data_tx.send(payload)?;
+                                }
+                            }
+                        }
+                        Ok(QueryType::Log(q)) => {
+                            info!("Dispatching Log query: {}", &q.to_string()?);
+
+                            let result = query_log(q.to_string()?, client.clone()).await;
+                            if let Ok(data) = result {
+                                if data.logs.is_empty() {
+                                    data_tx.send(PayloadType::None)?;
+                                } else {
+                                    let payload = PayloadType::Log(data);
+                                    data_tx.send(payload)?;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            // If the query cannot be parsed, try perform a case-insensitive global search for the search term
+                            warn!("{}. Attempting all column search...", e);
+
+                            let search_query = ALL_COLUMN_SEARCH.replace('$', query).to_nrql()?;
+                            let result = query_log(search_query.to_string()?, client.clone()).await;
+
+                            if let Ok(data) = result {
+                                if data.logs.is_empty() {
+                                    data_tx.send(PayloadType::None)?;
+                                } else {
+                                    let payload = PayloadType::Log(data);
+                                    data_tx.send(payload)?;
+                                }
+                            }
+                        }
+                    }
                 }
             }
             UIEvent::DeleteQuery(query) => {
@@ -181,7 +265,7 @@ async fn listen(
 fn setup_logging() -> Result<(), Box<dyn std::error::Error>> {
     let config = ConfigBuilder::new().set_time_format_rfc2822().build();
 
-    WriteLogger::init(LevelFilter::Debug, config, File::create("app.log")?)?;
+    WriteLogger::init(LevelFilter::Info, config, File::create("app.log")?)?;
 
     Ok(())
 }

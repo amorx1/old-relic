@@ -65,7 +65,7 @@ pub fn ui(app: &mut App, frame: &mut Frame) {
                         if dataset.has_data {
                             render_graph(app, frame, graph_area);
                         } else {
-                            render_loading(app, frame, graph_area);
+                            render_loading(app, frame, area);
                         }
                     } else {
                         render_splash(app, frame, graph_area);
@@ -283,7 +283,7 @@ pub fn render_barchart(app: &mut App, frame: &mut Frame, area: Rect) {
                             .num_hours(),
                     ))
                     .bold()
-                    .red()
+                    .style(Style::default().fg(app.config.theme.chart_fg))
                     .centered(),
                 )
                 .padding(Padding::horizontal(2))
@@ -527,6 +527,16 @@ pub fn render_dashboard(app: &mut App, frame: &mut Frame, area: Rect) {
             let [first, second] = horizontal.areas(bottom);
             vec![top, first, second]
         }
+        4 => {
+            let vertical =
+                Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
+            let [top, bottom] = vertical.areas(area);
+            let horizontal =
+                Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]);
+            let [first, second] = horizontal.areas(top);
+            let [third, fourth] = horizontal.areas(bottom);
+            vec![first, second, third, fourth]
+        }
         _ => panic!(),
     };
 
@@ -680,9 +690,10 @@ pub fn render_query_list(app: &mut App, frame: &mut Frame, area: Rect) {
 
 pub fn render_query_box(app: &mut App, frame: &mut Frame, area: Rect) {
     let input = Paragraph::new(app.inputs.get(Focus::QueryInput).bold())
-        .style(match app.focus.panel {
-            Focus::QueryInput => Style::default().fg(app.config.theme.focus_fg),
-            _ => Style::default(),
+        .style(if app.focus.panel.eq(&Focus::QueryInput) {
+            Style::default().fg(app.config.theme.focus_fg)
+        } else {
+            Style::default()
         })
         .block(
             Block::default()
@@ -774,7 +785,6 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
             .y_axis(y_axis);
         frame.render_widget(chart, area);
     }
-    // frame.render_widget(chart, frame.size());
 }
 
 pub fn center(horizontal: Constraint, vertical: Constraint, area: Rect) -> Rect {

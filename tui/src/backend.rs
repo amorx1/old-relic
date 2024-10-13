@@ -65,6 +65,7 @@ pub struct Backend {
 pub enum UIEvent {
     AddQuery(String),
     DeleteQuery(String),
+    RefreshQuery,
 }
 
 impl Backend {
