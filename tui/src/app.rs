@@ -9,7 +9,7 @@ use crate::{
 use anyhow::Result;
 use crossbeam_channel::{Receiver as CrossBeamReceiver, Sender as CrossBeamSender};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use log::{debug, error, info};
+use log::{error, info};
 use rand::{thread_rng, Rng};
 use ratatui::{backend::Backend, style::Color, widgets::ListState, Terminal};
 use std::{
@@ -114,6 +114,7 @@ impl App {
         loop {
             if self.redraw ||
                 // TODO: Currently redrawing on each tick to keep graph live, should be on an interval
+                // TODO: Redraw on window resizing
                 (!self.data.timeseries.is_empty() && self.focus.tab == Tab::Graph)
             {
                 terminal.draw(|f| ui(&mut self, f))?;
@@ -255,9 +256,9 @@ impl App {
                                         match self.inputs.get(Focus::SessionLoad) {
                                             // Load session
                                             "y" | "Y" => {
-                                                self.load_session().map_err(|e| {
+                                                if let Err(e) = self.load_session() {
                                                     error!("{}", e);
-                                                });
+                                                }
                                             }
                                             // Don't load session
                                             _ => {}
@@ -273,7 +274,9 @@ impl App {
                                         match self.inputs.get(Focus::SessionSave) {
                                             // Save session
                                             "y" | "Y" => {
-                                                self.save_session().map_err(|e| error!("{}", e));
+                                                if let Err(e) = self.save_session() {
+                                                    error!("{}", e);
+                                                }
                                             }
                                             _ => {}
                                         }

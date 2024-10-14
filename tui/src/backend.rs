@@ -1,5 +1,8 @@
 use crate::query::{Timeseries, TimeseriesResult};
 use anyhow::{Error, Result};
+use log::{debug, warn};
+use std::fs::File;
+use std::io::BufReader;
 
 use std::{
     collections::BTreeMap,
@@ -113,11 +116,25 @@ impl Default for ChartData {
     }
 }
 
-pub async fn query_log(query: String, client: NewRelicClient) -> Result<LogPayload, Error> {
-    let data: Vec<serde_json::Value> = client
-        .query::<serde_json::Value>(query)
-        .await
-        .unwrap_or_default();
+pub async fn query_log(query: NRQLQuery, client: NewRelicClient) -> Result<LogPayload, Error> {
+    // Mock test data
+    let data: Vec<serde_json::Value> = if query.r#where.ends_with("example-api'") {
+        debug!("Found test query. Mocking response data...");
+        let file = File::open("./src/mock_log.json")?;
+        let reader = BufReader::new(file);
+
+        let data: Vec<serde_json::Value> = serde_json::from_reader(reader).expect("");
+
+        debug!("Mock data deserialization succeded!");
+        data
+    } else {
+        client
+            .query::<serde_json::Value>(query.to_string()?)
+            .await
+            .unwrap_or_default()
+    };
+
+    debug!("{data:?}");
 
     let mut logs: BTreeMap<String, String> = BTreeMap::new();
     let mut chart_data = ChartData::default();
@@ -125,6 +142,7 @@ pub async fn query_log(query: String, client: NewRelicClient) -> Result<LogPaylo
     let mut max_bounds: (f64, f64) = (0 as f64, 0 as f64);
 
     for log in data {
+        debug!("{log:?}");
         let timestamp = log
             .get("timestamp")
             .expect("ERROR: Log had no timestamp")

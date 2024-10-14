@@ -26,8 +26,8 @@ use session::Session;
 use simplelog::{ConfigBuilder, WriteLogger};
 use std::{fs::File, time::Duration};
 use tokio::{
-    join, runtime, select,
-    time::{self, interval, sleep},
+    runtime,
+    time::{self},
 };
 use tokio_stream::{wrappers::IntervalStream, StreamExt};
 use ui::PALETTES;
@@ -40,7 +40,7 @@ use std::{
     sync::mpsc::{channel, Sender},
 };
 
-const DEFAULT_THEME: &str = "4";
+const DEFAULT_THEME: &str = "1";
 const NEW_RELIC_ENDPOINT: &str = "https://api.newrelic.com/graphql";
 
 pub struct Config {
@@ -86,7 +86,7 @@ impl Config {
 fn main() -> io::Result<()> {
     enable_raw_mode()?;
     stdout().execute(EnterAlternateScreen)?;
-    _ = setup_logging();
+    setup_logging().expect("Error setting up logging!");
 
     let config = Config::load();
 
@@ -110,13 +110,13 @@ fn main() -> io::Result<()> {
             let (data_tx, data_rx) = channel::<PayloadType>();
             let (ui_tx, ui_rx) = unbounded::<UIEvent>();
             {
-                // Query events
                 let newrelic_client = newrelic_client.clone();
                 let data_tx = data_tx.clone();
                 let ui_tx = ui_tx.clone();
 
+                // Query events
                 backend.spawn(async move {
-                    info!("Starting listener");
+                    debug!("Starting listener thread");
                     _ = listen(newrelic_client, data_tx, ui_rx).await;
                 });
 
@@ -124,7 +124,7 @@ fn main() -> io::Result<()> {
                 backend.spawn(async move {
                     let mut stream = IntervalStream::new(time::interval(Duration::from_secs(10)));
                     while let Some(_ts) = stream.next().await {
-                        info!("Sending UI::RefreshQuery command!");
+                        debug!("Sending UI::RefreshQuery command!");
 
                         if ui_tx.send(UIEvent::RefreshQuery).is_err() {
                             warn!("Sending command UIEvent::RefreshQuery to UI failed!");
@@ -174,7 +174,7 @@ async fn listen(
                     Ok(QueryType::Log(q)) => {
                         info!("Dispatching Log query: {}", &q.to_string()?);
 
-                        let result = query_log(q.to_string()?, client.clone()).await;
+                        let result = query_log(q, client.clone()).await;
                         if let Ok(data) = result {
                             if data.logs.is_empty() {
                                 data_tx.send(PayloadType::None)?;
@@ -182,6 +182,8 @@ async fn listen(
                                 let payload = PayloadType::Log(data);
                                 data_tx.send(payload)?;
                             }
+                        } else {
+                            warn!("Querying log threw an error!")
                         }
                     }
                     Err(e) => {
@@ -189,7 +191,7 @@ async fn listen(
                         warn!("{}. Attempting all column search...", e);
 
                         let search_query = ALL_COLUMN_SEARCH.replace('$', &query).to_nrql()?;
-                        let result = query_log(search_query.to_string()?, client.clone()).await;
+                        let result = query_log(search_query, client.clone()).await;
 
                         if let Ok(data) = result {
                             if data.logs.is_empty() {
@@ -198,6 +200,8 @@ async fn listen(
                                 let payload = PayloadType::Log(data);
                                 data_tx.send(payload)?;
                             }
+                        } else {
+                            warn!("Querying log threw an error!")
                         }
                     }
                 }
@@ -210,7 +214,7 @@ async fn listen(
 
                     match parsed_query {
                         Ok(QueryType::Timeseries(q)) => {
-                            info!("Dispatching Timeseries query: {}", &q.to_string()?);
+                            debug!("Refreshing QueryType::Timeseries : {}", &q.to_string()?);
 
                             let result = query_timeseries(q, client.clone()).await;
                             if let Ok(data) = result {
@@ -223,33 +227,11 @@ async fn listen(
                             }
                         }
                         Ok(QueryType::Log(q)) => {
-                            info!("Dispatching Log query: {}", &q.to_string()?);
-
-                            let result = query_log(q.to_string()?, client.clone()).await;
-                            if let Ok(data) = result {
-                                if data.logs.is_empty() {
-                                    data_tx.send(PayloadType::None)?;
-                                } else {
-                                    let payload = PayloadType::Log(data);
-                                    data_tx.send(payload)?;
-                                }
-                            }
+                            debug!("Ignoring refresh for QueryType::Log");
                         }
                         Err(e) => {
-                            // If the query cannot be parsed, try perform a case-insensitive global search for the search term
-                            warn!("{}. Attempting all column search...", e);
-
-                            let search_query = ALL_COLUMN_SEARCH.replace('$', query).to_nrql()?;
-                            let result = query_log(search_query.to_string()?, client.clone()).await;
-
-                            if let Ok(data) = result {
-                                if data.logs.is_empty() {
-                                    data_tx.send(PayloadType::None)?;
-                                } else {
-                                    let payload = PayloadType::Log(data);
-                                    data_tx.send(payload)?;
-                                }
-                            }
+                            warn!("{e:?}");
+                            debug!("Ignoring refresh for QueryType::Log");
                         }
                     }
                 }
@@ -265,7 +247,7 @@ async fn listen(
 fn setup_logging() -> Result<(), Box<dyn std::error::Error>> {
     let config = ConfigBuilder::new().set_time_format_rfc2822().build();
 
-    WriteLogger::init(LevelFilter::Info, config, File::create("app.log")?)?;
+    WriteLogger::init(LevelFilter::Debug, config, File::create("app.log")?)?;
 
     Ok(())
 }
