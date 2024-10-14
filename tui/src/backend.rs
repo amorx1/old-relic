@@ -1,6 +1,6 @@
 use crate::query::{Timeseries, TimeseriesResult};
 use anyhow::{Error, Result};
-use log::{debug, warn};
+use log::{debug};
 use std::fs::File;
 use std::io::BufReader;
 

@@ -7,7 +7,7 @@ use crate::{
 };
 
 use anyhow::Result;
-use crossbeam_channel::{Receiver as CrossBeamReceiver, Sender as CrossBeamSender};
+use crossbeam_channel::{Sender as CrossBeamSender};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use log::{error, info};
 use rand::{thread_rng, Rng};

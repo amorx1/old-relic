@@ -13,12 +13,12 @@ use app::{App, Theme, ALL_COLUMN_SEARCH};
 use backend::{query_log, query_timeseries, PayloadType, UIEvent};
 
 use client::NewRelicClient;
-use crossbeam_channel::{unbounded, Receiver as CrossBeamReceiver, Sender as CrossBeamSender};
+use crossbeam_channel::{unbounded, Receiver as CrossBeamReceiver};
 use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use log::{debug, error, info, warn, LevelFilter};
+use log::{debug, info, warn, LevelFilter};
 use query::{QueryType, NRQL};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use reqwest::Client;
@@ -226,7 +226,7 @@ async fn listen(
                                 }
                             }
                         }
-                        Ok(QueryType::Log(q)) => {
+                        Ok(QueryType::Log(_q)) => {
                             debug!("Ignoring refresh for QueryType::Log");
                         }
                         Err(e) => {

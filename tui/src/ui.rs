@@ -32,7 +32,7 @@ pub const PALETTES: [tailwind::Palette; 9] = [
 
 pub fn ui(app: &mut App, frame: &mut Frame) {
     let area = frame.area();
-    let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]);
+    let _vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]);
 
     // let [header_area, area] = vertical.areas(area);
 
@@ -171,11 +171,11 @@ pub fn render_seek(app: &mut App, frame: &mut Frame, area: Rect) {
     let (min_x, _) = bounds.mins;
     let (max_x, _) = bounds.maxes;
 
-    let min_x_date_time = DateTime::<Utc>::from_utc(
+    let _min_x_date_time = DateTime::<Utc>::from_utc(
         NaiveDateTime::from_timestamp_opt(min_x as i64 / 1000, 0).unwrap(),
         Utc,
     );
-    let max_x_date_time = DateTime::<Utc>::from_utc(
+    let _max_x_date_time = DateTime::<Utc>::from_utc(
         NaiveDateTime::from_timestamp_opt(max_x as i64 / 1000, 0).unwrap(),
         Utc,
     );
@@ -314,7 +314,7 @@ pub fn render_log_detail(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(paragraph, area);
 }
 
-pub fn render_no_result(app: &mut App, frame: &mut Frame, area: Rect) {
+pub fn render_no_result(_app: &mut App, frame: &mut Frame, area: Rect) {
     let area = center(Constraint::Ratio(1, 2), Constraint::Ratio(1, 2), area);
 
     let paragraph = Paragraph::new("No result!")
