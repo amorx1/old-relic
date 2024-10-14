@@ -1,7 +1,6 @@
 # Old Relic
-New Relic Application Monitoring TUI client.
 
-<!-- ![alt text](https://github.com/amorx1/urelic/blob/main/screenshot.png?raw=true) -->
+## Demo
 [![asciicast](https://asciinema.org/a/1ZYQicY32zdoVcJz8K5qrGBmY.svg)](https://asciinema.org/a/1ZYQicY32zdoVcJz8K5qrGBmY)
 
 ## Features
