@@ -7,7 +7,7 @@ use crate::{
 };
 
 use anyhow::Result;
-use crossbeam_channel::{Sender as CrossBeamSender};
+use crossbeam_channel::Sender as CrossBeamSender;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use log::{error, info};
 use rand::{thread_rng, Rng};
@@ -209,7 +209,6 @@ impl App {
                                         .last()
                                         .unwrap()
                                         .trim_matches(|p| char::is_ascii_punctuation(&p));
-                                    // let query = ALL_COLUMN_SEARCH.replace('$', correlation_id);
 
                                     self.add_query(value.to_owned());
                                     self.set_focus(UIFocus {
@@ -217,10 +216,14 @@ impl App {
                                         ..self.focus
                                     });
                                 }
-                                Focus::Default => self.set_focus(UIFocus {
-                                    panel: Focus::Log,
-                                    ..self.focus
-                                }),
+                                Focus::Default => {
+                                    if self.focus.tab != Tab::Graph {
+                                        self.set_focus(UIFocus {
+                                            panel: Focus::Log,
+                                            ..self.focus
+                                        })
+                                    }
+                                }
                                 _ => {}
                             },
                             _ => (),
@@ -431,7 +434,11 @@ impl App {
                 }
             }
             false
-        })
+        });
+
+        // Reset list
+        self.data.logs.select(0);
+        self.data.logs.log_list_state.select(Some(0));
     }
 
     fn rename_query(&mut self, query: String, alias: String) {
@@ -678,5 +685,9 @@ impl App {
                 .unwrap_or(&String::default())
                 .to_owned(),
         );
+
+        // Reset list
+        self.data.logs.select(0);
+        self.data.logs.log_list_state.select(Some(0));
     }
 }

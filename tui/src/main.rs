@@ -104,7 +104,7 @@ fn main() -> io::Result<()> {
 
             let backend = runtime::Builder::new_multi_thread()
                 .worker_threads(2)
-                .thread_name("data")
+                .thread_name("backend")
                 .enable_all()
                 .build()?;
             let (data_tx, data_rx) = channel::<PayloadType>();
@@ -247,7 +247,7 @@ async fn listen(
 fn setup_logging() -> Result<(), Box<dyn std::error::Error>> {
     let config = ConfigBuilder::new().set_time_format_rfc2822().build();
 
-    WriteLogger::init(LevelFilter::Debug, config, File::create("app.log")?)?;
+    WriteLogger::init(LevelFilter::Info, config, File::create("app.log")?)?;
 
     Ok(())
 }

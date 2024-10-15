@@ -1,6 +1,6 @@
 use crate::query::{Timeseries, TimeseriesResult};
 use anyhow::{Error, Result};
-use log::{debug};
+use log::debug;
 use std::fs::File;
 use std::io::BufReader;
 
@@ -98,6 +98,7 @@ pub struct ChartData {
     pub info: Vec<(f64, f64)>,
     pub error: Vec<(f64, f64)>,
     pub debug: Vec<(f64, f64)>,
+    pub warn: Vec<(f64, f64)>,
 }
 
 impl ChartData {
@@ -106,6 +107,7 @@ impl ChartData {
             info: vec![],
             error: vec![],
             debug: vec![],
+            warn: vec![],
         }
     }
 }
@@ -120,12 +122,14 @@ pub async fn query_log(query: NRQLQuery, client: NewRelicClient) -> Result<LogPa
     // Mock test data
     let data: Vec<serde_json::Value> = if query.r#where.ends_with("example-api'") {
         debug!("Found test query. Mocking response data...");
+
         let file = File::open("./src/mock_log.json")?;
         let reader = BufReader::new(file);
 
-        let data: Vec<serde_json::Value> = serde_json::from_reader(reader).expect("");
+        let data: Vec<serde_json::Value> = serde_json::from_reader(reader)?;
 
         debug!("Mock data deserialization succeded!");
+
         data
     } else {
         client
@@ -160,6 +164,7 @@ pub async fn query_log(query: NRQLQuery, client: NewRelicClient) -> Result<LogPa
             "Information" => chart_data.info.push((timestamp.parse::<f64>()?, 1_f64)),
             "Error" => chart_data.error.push((timestamp.parse::<f64>()?, 1_f64)),
             "Debug" => chart_data.debug.push((timestamp.parse::<f64>()?, 1_f64)),
+            "Warning" => chart_data.warn.push((timestamp.parse::<f64>()?, 1_f64)),
             // TODO: How to handle none
             _ => {}
         }

@@ -208,6 +208,11 @@ pub fn render_barchart(app: &mut App, frame: &mut Frame, area: Rect) {
         .marker(Marker::Block)
         .style(Style::default().red())
         .graph_type(GraphType::Bar);
+    let warn_dataset = Dataset::default()
+        .data(&app.data.logs.chart_data.warn)
+        .marker(Marker::Block)
+        .style(Style::default().yellow())
+        .graph_type(GraphType::Bar);
     let debug_dataset = Dataset::default()
         .data(&app.data.logs.chart_data.debug)
         .marker(Marker::Block)
@@ -265,33 +270,33 @@ pub fn render_barchart(app: &mut App, frame: &mut Frame, area: Rect) {
         .bounds([0.0, 3.0]);
 
     // Create the chart and link all the parts together
-    let chart = Chart::new(vec![info_dataset, debug_dataset, error_dataset])
-        .block(
-            Block::new()
-                .title_bottom(
-                    // Line::from(format!(
-                    //     "{}, {}",
-                    //     selected_date_time.date_naive(),
-                    //     selected_date_time.time(),
-                    // ))
-                    Line::from(format!(
-                        "{}, {} ({} hours ago)",
-                        selected_date_time.date_naive(),
-                        selected_date_time.time(),
-                        Utc::now()
-                            .signed_duration_since(selected_date_time)
-                            .num_hours(),
-                    ))
-                    .bold()
-                    .style(Style::default().fg(app.config.theme.chart_fg))
-                    .centered(),
-                )
-                .padding(Padding::horizontal(2))
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded),
-        )
-        .x_axis(x_axis)
-        .y_axis(y_axis);
+    let chart = Chart::new(vec![
+        info_dataset,
+        debug_dataset,
+        error_dataset,
+        warn_dataset,
+    ])
+    .block(
+        Block::new()
+            .title_bottom(
+                Line::from(format!(
+                    "{}, {} ({} hours ago)",
+                    selected_date_time.date_naive(),
+                    selected_date_time.time(),
+                    Utc::now()
+                        .signed_duration_since(selected_date_time)
+                        .num_hours(),
+                ))
+                .bold()
+                .style(Style::default().fg(app.config.theme.chart_fg))
+                .centered(),
+            )
+            .padding(Padding::horizontal(2))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded),
+    )
+    .x_axis(x_axis)
+    .y_axis(y_axis);
 
     frame.render_widget(chart, area);
 }
