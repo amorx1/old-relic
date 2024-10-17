@@ -437,8 +437,10 @@ impl App {
         });
 
         // Reset list
-        self.data.logs.select(0);
-        self.data.logs.log_list_state.select(Some(0));
+        if !self.data.logs.is_empty() {
+            self.data.logs.select(0);
+            self.data.logs.log_list_state.select(Some(0));
+        }
     }
 
     fn rename_query(&mut self, query: String, alias: String) {
@@ -687,7 +689,9 @@ impl App {
         );
 
         // Reset list
-        self.data.logs.select(0);
-        self.data.logs.log_list_state.select(Some(0));
+        if !self.data.logs.is_empty() {
+            self.data.logs.select(0);
+            self.data.logs.log_list_state.select(Some(0));
+        }
     }
 }
