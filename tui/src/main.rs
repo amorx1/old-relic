@@ -154,7 +154,6 @@ async fn listen(
     for event in ui_rx {
         match event {
             UIEvent::AddQuery(query) => {
-                queries.insert(query.to_owned());
                 let parsed_query = query.to_nrql().map(QueryType::from);
 
                 match parsed_query {
@@ -166,6 +165,7 @@ async fn listen(
                             if data.data.is_empty() {
                                 data_tx.send(PayloadType::None)?;
                             } else {
+                                queries.insert(query.to_owned());
                                 let payload = PayloadType::Timeseries(data);
                                 data_tx.send(payload)?;
                             }
@@ -179,6 +179,7 @@ async fn listen(
                             if data.logs.is_empty() {
                                 data_tx.send(PayloadType::None)?;
                             } else {
+                                queries.insert(query.to_owned());
                                 let payload = PayloadType::Log(data);
                                 data_tx.send(payload)?;
                             }
@@ -197,6 +198,7 @@ async fn listen(
                             if data.logs.is_empty() {
                                 data_tx.send(PayloadType::None)?;
                             } else {
+                                queries.insert(query.to_owned());
                                 let payload = PayloadType::Log(data);
                                 data_tx.send(payload)?;
                             }
