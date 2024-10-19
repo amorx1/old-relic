@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 
+use log::debug;
 use regex::RegexBuilder;
 
 use crate::query::NRQLQuery;
@@ -15,6 +16,6 @@ pub fn parse_nrql(input: &str) -> Result<NRQLQuery> {
     if let Some(captures) = captures {
         NRQLQuery::from_captures(captures)
     } else {
-        Err(anyhow!("Query could not be parsed!"))
+        Err(anyhow!("Query {input:?} could not be parsed!"))
     }
 }

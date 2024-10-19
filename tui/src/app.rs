@@ -82,7 +82,6 @@ pub struct App {
     pub tabs: Vec<String>,
     pub data_rx: Receiver<PayloadType>,
     pub ui_tx: CrossBeamSender<UIEvent>,
-    // pub list_state: ListState,
     pub data: Data,
     pub query_history: VecDeque<String>,
     pub facet_colours: BTreeMap<String, Color>,
@@ -359,6 +358,13 @@ impl App {
                                 selection: payload.selection,
                                 has_data: true,
                             });
+
+                            // Only switch focus to Graph for new query
+                            self.set_focus(UIFocus {
+                                loading: false,
+                                tab: Tab::Graph,
+                                ..self.focus
+                            });
                         } else {
                             // Update data for existing query
                             _ = self
@@ -369,7 +375,12 @@ impl App {
                                     data.facets = payload.data;
                                     data.bounds = payload.bounds;
                                     data.has_data = true
-                                })
+                                });
+
+                            self.set_focus(UIFocus {
+                                loading: false,
+                                ..self.focus
+                            });
                         }
 
                         for facet_key in payload.facets {
@@ -382,12 +393,6 @@ impl App {
                                 ));
                             }
                         }
-
-                        self.set_focus(UIFocus {
-                            loading: false,
-                            tab: Tab::Graph,
-                            ..self.focus
-                        });
                     }
                     PayloadType::Log(payload) => {
                         info!("Received payload from backend of type: LogPayload");
