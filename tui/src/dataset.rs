@@ -1,10 +1,10 @@
 use std::{
-    collections::{self, btree_map::Entry, BTreeMap, HashSet},
+    collections::{self, btree_map::Entry, BTreeMap, HashSet, VecDeque},
     string::String,
     vec::Vec,
 };
 
-use ratatui::widgets::ListState;
+use ratatui::{style::Color, widgets::ListState};
 
 use crate::backend::{Bounds, ChartData};
 
@@ -12,6 +12,8 @@ use crate::backend::{Bounds, ChartData};
 pub struct Data {
     pub timeseries: Datasets,
     pub logs: Logs,
+    pub query_history: VecDeque<String>,
+    pub facet_colours: BTreeMap<String, Color>,
 }
 
 #[derive(Default)]

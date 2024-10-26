@@ -83,8 +83,8 @@ pub struct App {
     pub data_rx: Receiver<PayloadType>,
     pub ui_tx: CrossBeamSender<UIEvent>,
     pub data: Data,
-    pub query_history: VecDeque<String>,
-    pub facet_colours: BTreeMap<String, Color>,
+    // pub query_history: VecDeque<String>,
+    // pub facet_colours: BTreeMap<String, Color>,
     pub redraw: bool,
 }
 
@@ -101,9 +101,9 @@ impl App {
             ui_tx,
             focus: UIFocus::default(),
             data: Data::default(),
-            facet_colours: BTreeMap::default(),
+            // facet_colours: BTreeMap::default(),
             tabs: vec!["Logs".into()],
-            query_history: VecDeque::default(),
+            // query_history: VecDeque::default(),
             redraw: true,
         }
     }
@@ -308,16 +308,16 @@ impl App {
                             }
                             KeyCode::Up => {
                                 self.inputs.clear(Focus::QueryInput);
-                                let query = self.query_history.pop_front().unwrap_or_default();
+                                let query = self.data.query_history.pop_front().unwrap_or_default();
                                 self.inputs.set(Focus::QueryInput, query.clone());
                                 self.inputs.move_cursor_end(Focus::QueryInput);
-                                self.query_history.push_back(query);
+                                self.data.query_history.push_back(query);
                             }
                             KeyCode::Down => {
-                                let query = self.query_history.pop_back().unwrap_or_default();
+                                let query = self.data.query_history.pop_back().unwrap_or_default();
                                 self.inputs.set(Focus::QueryInput, query.clone());
                                 self.inputs.move_cursor_end(Focus::QueryInput);
-                                self.query_history.push_front(query);
+                                self.data.query_history.push_front(query);
                             }
                             KeyCode::Esc => match self.focus.panel {
                                 Focus::SessionLoad => {}
@@ -385,7 +385,7 @@ impl App {
 
                         for facet_key in payload.facets {
                             // Only add facet key if not present
-                            if let Entry::Vacant(e) = self.facet_colours.entry(facet_key) {
+                            if let Entry::Vacant(e) = self.data.facet_colours.entry(facet_key) {
                                 e.insert(Color::Rgb(
                                     rng.gen::<u8>(),
                                     rng.gen::<u8>(),
@@ -471,7 +471,7 @@ impl App {
     }
 
     fn add_query(&mut self, query: String) {
-        self.query_history.push_back(query.clone());
+        self.data.query_history.push_back(query.clone());
         _ = self.ui_tx.send(UIEvent::AddQuery(query));
     }
 
@@ -622,7 +622,7 @@ impl App {
             &session_queries.len()
         );
 
-        self.query_history = VecDeque::from(session_queries);
+        self.data.query_history = VecDeque::from(session_queries);
         self.config.session.is_loaded = true;
 
         Ok(())
@@ -650,7 +650,7 @@ impl App {
             out += &yaml;
         }
 
-        let log_queries = serde_yaml::to_string(&self.query_history)?;
+        let log_queries = serde_yaml::to_string(&self.data.query_history)?;
 
         out += &log_queries;
 
@@ -687,7 +687,8 @@ impl App {
     fn clear_filters(&mut self) {
         self.data.logs.filters.clear();
         self.add_query(
-            self.query_history
+            self.data
+                .query_history
                 .back()
                 .unwrap_or(&String::default())
                 .to_owned(),

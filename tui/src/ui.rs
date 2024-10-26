@@ -560,7 +560,9 @@ pub fn render_ith_graph(app: &mut App, frame: &mut Frame, area: Rect, i: usize) 
                     .data(&points[..])
                     .marker(Marker::Braille)
                     .graph_type(GraphType::Line)
-                    .style(Style::default().fg(app.facet_colours.get(facet).unwrap().to_owned()))
+                    .style(
+                        Style::default().fg(app.data.facet_colours.get(facet).unwrap().to_owned()),
+                    )
             })
             .collect::<Vec<_>>()
     });
@@ -719,7 +721,9 @@ pub fn render_graph(app: &mut App, frame: &mut Frame, area: Rect) {
                     .data(&points[..])
                     .marker(Marker::Braille)
                     .graph_type(GraphType::Line)
-                    .style(Style::default().fg(app.facet_colours.get(facet).unwrap().to_owned()))
+                    .style(
+                        Style::default().fg(app.data.facet_colours.get(facet).unwrap().to_owned()),
+                    )
             })
             .collect::<Vec<_>>()
     });
