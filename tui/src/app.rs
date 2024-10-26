@@ -35,7 +35,6 @@ pub struct UI {
 impl Default for UI {
     fn default() -> Self {
         UI {
-            // tab: Tab::Graph,
             tab: Tab::Logs,
             panel: Focus::Default,
             input_mode: InputMode::Normal,
@@ -99,9 +98,7 @@ impl App {
             ui_tx,
             focus: UI::default(),
             data: Data::default(),
-            // facet_colours: BTreeMap::default(),
             tabs: vec!["Logs".into()],
-            // query_history: VecDeque::default(),
             redraw: true,
         }
     }
@@ -185,6 +182,7 @@ impl App {
                                     ..self.focus
                                 }),
                             },
+                            KeyCode::Char('i') => self.rehydrate_query(),
                             KeyCode::Char('T') => self.next_tab(),
                             KeyCode::Char('C') => self.clear_filters(),
                             KeyCode::Esc => self.set_focus(UI {
@@ -697,5 +695,10 @@ impl App {
             self.data.logs.select(0);
             self.data.logs.log_list_state.select(Some(0));
         }
+    }
+
+    fn rehydrate_query(&mut self) {
+        let selected_query = self.data.timeseries.selected.to_owned();
+        self.inputs.set(Focus::QueryInput, selected_query);
     }
 }

@@ -802,17 +802,4 @@ pub fn center(horizontal: Constraint, vertical: Constraint, area: Rect) -> Rect 
         .areas(area);
     let [area] = Layout::vertical([vertical]).flex(Flex::Center).areas(area);
     area
-    // let popup_layout = Layout::vertical([
-    //     Constraint::Percentage((100 - percent_y) / 2),
-    //     Constraint::Percentage(percent_y),
-    //     Constraint::Percentage((100 - percent_y) / 2),
-    // ])
-    // .split(r);
-
-    // Layout::horizontal([
-    //     Constraint::Percentage((100 - percent_x) / 2),
-    //     Constraint::Percentage(percent_x),
-    //     Constraint::Percentage((100 - percent_x) / 2),
-    // ])
-    // .split(popup_layout[1])[1]
 }
