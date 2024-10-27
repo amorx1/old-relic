@@ -158,28 +158,28 @@ async fn listen(
 
                 match parsed_query {
                     Ok(QueryType::Timeseries(q)) => {
-                        info!("Dispatching Timeseries query: {}", &q.to_string()?);
+                        info!("Dispatching Timeseries query: {}", q.clone().to_string()?);
 
-                        let result = query_timeseries(q, client.clone()).await;
+                        let result = query_timeseries(q.clone(), client.clone()).await;
                         if let Ok(data) = result {
                             if data.data.is_empty() {
                                 data_tx.send(PayloadType::None)?;
                             } else {
-                                queries.insert(query.to_owned());
+                                queries.insert(q.to_string()?);
                                 let payload = PayloadType::Timeseries(data);
                                 data_tx.send(payload)?;
                             }
                         }
                     }
                     Ok(QueryType::Log(q)) => {
-                        info!("Dispatching Log query: {}", &q.to_string()?);
+                        info!("Dispatching Log query: {}", q.clone().to_string()?);
 
-                        let result = query_log(q, client.clone()).await;
+                        let result = query_log(q.clone(), client.clone()).await;
                         if let Ok(data) = result {
                             if data.logs.is_empty() {
                                 data_tx.send(PayloadType::None)?;
                             } else {
-                                queries.insert(query.to_owned());
+                                queries.insert(q.to_string()?);
                                 let payload = PayloadType::Log(data);
                                 data_tx.send(payload)?;
                             }
@@ -192,13 +192,13 @@ async fn listen(
                         warn!("{}. Attempting all column search...", e);
 
                         let search_query = ALL_COLUMN_SEARCH.replace('$', &query).to_nrql()?;
-                        let result = query_log(search_query, client.clone()).await;
+                        let result = query_log(search_query.clone(), client.clone()).await;
 
                         if let Ok(data) = result {
                             if data.logs.is_empty() {
                                 data_tx.send(PayloadType::None)?;
                             } else {
-                                queries.insert(query.to_owned());
+                                queries.insert(search_query.to_string()?);
                                 let payload = PayloadType::Log(data);
                                 data_tx.send(payload)?;
                             }
@@ -239,7 +239,10 @@ async fn listen(
                 }
             }
             UIEvent::DeleteQuery(query) => {
-                queries.remove(&query);
+                info!("Removing query: {query:?}");
+                if !queries.remove(&query) {
+                    warn!("Query {query:?} was not found. Nothing removed.");
+                }
             }
         }
     }
