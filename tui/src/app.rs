@@ -609,7 +609,7 @@ impl App {
     }
 
     pub fn load_session(&mut self) -> Result<()> {
-        let session_path = self.config.session.session_path.clone();
+        let session_path = self.config.session.path.clone();
         let yaml = fs::read_to_string(session_path)?;
         let session_queries: Vec<String> = serde_yaml::from_str(&yaml)?;
 
@@ -650,7 +650,7 @@ impl App {
 
         out += &log_queries;
 
-        let session_path = self.config.session.session_path.clone();
+        let session_path = self.config.session.path.clone();
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)

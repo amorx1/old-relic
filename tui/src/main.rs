@@ -48,6 +48,7 @@ pub struct Config {
     api_key: String,
     session: Session,
     theme: Theme,
+    path: PathBuf,
 }
 
 impl Config {
@@ -64,13 +65,18 @@ impl Config {
         };
 
         // Construct the path to Session directory
-        let mut session_path = PathBuf::from(home_dir);
         // TODO: Implement for non-MacOS
-        session_path.push(".config/old-relic/session.yaml");
+        let home_path = PathBuf::from(home_dir);
+
+        let mut config_path = home_path.clone();
+        config_path.push(".config/old-relic");
+
+        let mut session_path = config_path.clone();
+        session_path.push("session.yaml");
 
         let session = Session {
             queries: None,
-            session_path,
+            path: session_path,
             is_loaded: false,
         };
 
@@ -79,6 +85,7 @@ impl Config {
             api_key,
             session,
             theme,
+            path: config_path,
         }))
     }
 }
@@ -86,12 +93,12 @@ impl Config {
 fn main() -> io::Result<()> {
     enable_raw_mode()?;
     stdout().execute(EnterAlternateScreen)?;
-    setup_logging().expect("Error setting up logging!");
 
     let config = Config::load();
 
     match config {
         Ok(config) => {
+            setup_logging(&config).expect("Error setting up logging!");
             let mut newrelic_client = NewRelicClient::builder();
             newrelic_client
                 .url(NEW_RELIC_ENDPOINT)
@@ -249,10 +256,13 @@ async fn listen(
     Ok(())
 }
 
-fn setup_logging() -> Result<(), Box<dyn std::error::Error>> {
-    let config = ConfigBuilder::new().set_time_format_rfc2822().build();
+fn setup_logging(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    let log_config = ConfigBuilder::new().set_time_format_rfc2822().build();
 
-    WriteLogger::init(LevelFilter::Info, config, File::create("app.log")?)?;
+    let mut log_file_path = config.path.clone();
+    log_file_path.push("app.log");
+
+    WriteLogger::init(LevelFilter::Info, log_config, File::create(log_file_path)?)?;
 
     Ok(())
 }
