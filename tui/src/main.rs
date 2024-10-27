@@ -55,7 +55,7 @@ impl Config {
         let account = env::var("NR_ACCOUNT")?;
         let api_key = env::var("NR_API_KEY")?;
         let home_dir = env::var("HOME")?;
-        let palette = env::var("THEME")
+        let palette = env::var("NR_THEME")
             .unwrap_or(DEFAULT_THEME.into())
             .parse::<usize>()?;
         let theme = Theme {
