@@ -66,7 +66,7 @@ impl Config {
         // Construct the path to Session directory
         let mut session_path = PathBuf::from(home_dir);
         // TODO: Implement for non-MacOS
-        session_path.push("Library/Application Support/old-relic/session.yaml");
+        session_path.push(".config/old-relic/session.yaml");
 
         let session = Session {
             queries: None,
