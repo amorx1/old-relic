@@ -128,209 +128,221 @@ impl App {
 
             // Event handlers
             if let Ok(true) = event::poll(Duration::from_millis(50)) {
-                if let Event::Key(key) = event::read()? {
-                    match self.focus.input_mode {
-                        // Normal Mode
-                        InputMode::Normal if key.kind == KeyEventKind::Press => match key.code {
-                            KeyCode::Char('q') => {
-                                self.set_focus(UI {
-                                    panel: Focus::SessionSave,
-                                    input_mode: InputMode::Input,
-                                    ..self.focus
-                                });
-                            }
-                            KeyCode::Char('F') => self.set_focus(UI {
-                                panel: Focus::Search,
-                                input_mode: InputMode::Input,
-                                ..self.focus
-                            }),
-                            KeyCode::Char('e') => {
-                                self.set_focus(UI {
-                                    panel: Focus::QueryInput,
-                                    input_mode: InputMode::Input,
-                                    ..self.focus
-                                });
-                            }
-                            KeyCode::Char('j') | KeyCode::Down => match self.focus.panel {
-                                Focus::LogDetail => {}
-                                _ => self.next(),
-                            },
-                            KeyCode::Char('k') | KeyCode::Up => match self.focus.panel {
-                                Focus::LogDetail => {}
-                                _ => self.previous(),
-                            },
-                            KeyCode::Char('x') => self.delete_query(),
-                            KeyCode::Char('r') => match self.focus.panel {
-                                Focus::QueryInput => {}
-                                _ => {
-                                    if !self.data.timeseries.is_empty() {
+                match event::read()? {
+                    Event::Key(key) => {
+                        match self.focus.input_mode {
+                            // Normal Mode
+                            InputMode::Normal if key.kind == KeyEventKind::Press => {
+                                match key.code {
+                                    KeyCode::Char('q') => {
                                         self.set_focus(UI {
-                                            panel: Focus::Rename,
+                                            panel: Focus::SessionSave,
                                             input_mode: InputMode::Input,
                                             ..self.focus
                                         });
                                     }
-                                }
-                            },
-                            KeyCode::Char('d') => match self.focus.panel {
-                                Focus::Dashboard => self.set_focus(UI {
-                                    panel: Focus::Default,
-                                    ..self.focus
-                                }),
-                                _ => self.set_focus(UI {
-                                    panel: Focus::Dashboard,
-                                    ..self.focus
-                                }),
-                            },
-                            KeyCode::Char('i') => self.rehydrate_query(),
-                            KeyCode::Char('T') => self.next_tab(),
-                            KeyCode::Char('C') => self.clear_filters(),
-                            KeyCode::Esc => self.set_focus(UI {
-                                panel: Focus::Default,
-                                ..self.focus
-                            }),
-                            KeyCode::Enter | KeyCode::Char(' ') => match self.focus.panel {
-                                Focus::Log => self.set_focus(UI {
-                                    panel: Focus::LogDetail,
-                                    ..self.focus
-                                }),
-                                Focus::LogDetail => {
-                                    let key_idx =
-                                        self.data.logs.log_item_list_state.selected().unwrap();
-                                    let log =
-                                        &self.data.logs.selected().unwrap()[key_idx].to_string();
-                                    let value = log
-                                        .split(' ')
-                                        .last()
-                                        .unwrap()
-                                        .trim_matches(|p| char::is_ascii_punctuation(&p));
-
-                                    self.add_query(value.to_owned());
-                                    self.set_focus(UI {
+                                    KeyCode::Char('F') => self.set_focus(UI {
+                                        panel: Focus::Search,
+                                        input_mode: InputMode::Input,
+                                        ..self.focus
+                                    }),
+                                    KeyCode::Char('e') => {
+                                        self.set_focus(UI {
+                                            panel: Focus::QueryInput,
+                                            input_mode: InputMode::Input,
+                                            ..self.focus
+                                        });
+                                    }
+                                    KeyCode::Char('j') | KeyCode::Down => match self.focus.panel {
+                                        Focus::LogDetail => {}
+                                        _ => self.next(),
+                                    },
+                                    KeyCode::Char('k') | KeyCode::Up => match self.focus.panel {
+                                        Focus::LogDetail => {}
+                                        _ => self.previous(),
+                                    },
+                                    KeyCode::Char('x') => self.delete_query(),
+                                    KeyCode::Char('r') => match self.focus.panel {
+                                        Focus::QueryInput => {}
+                                        _ => {
+                                            if !self.data.timeseries.is_empty() {
+                                                self.set_focus(UI {
+                                                    panel: Focus::Rename,
+                                                    input_mode: InputMode::Input,
+                                                    ..self.focus
+                                                });
+                                            }
+                                        }
+                                    },
+                                    KeyCode::Char('d') => match self.focus.panel {
+                                        Focus::Dashboard => self.set_focus(UI {
+                                            panel: Focus::Default,
+                                            ..self.focus
+                                        }),
+                                        _ => self.set_focus(UI {
+                                            panel: Focus::Dashboard,
+                                            ..self.focus
+                                        }),
+                                    },
+                                    KeyCode::Char('i') => self.rehydrate_query(),
+                                    KeyCode::Char('T') => self.next_tab(),
+                                    KeyCode::Char('C') => self.clear_filters(),
+                                    KeyCode::Esc => self.set_focus(UI {
                                         panel: Focus::Default,
                                         ..self.focus
-                                    });
-                                }
-                                Focus::Default => {
-                                    if self.focus.tab != Tab::Graph {
-                                        self.set_focus(UI {
-                                            panel: Focus::Log,
+                                    }),
+                                    KeyCode::Enter | KeyCode::Char(' ') => match self.focus.panel {
+                                        Focus::Log => self.set_focus(UI {
+                                            panel: Focus::LogDetail,
                                             ..self.focus
-                                        })
-                                    }
-                                }
-                                _ => {}
-                            },
-                            _ => (),
-                        },
+                                        }),
+                                        Focus::LogDetail => {
+                                            let key_idx = self
+                                                .data
+                                                .logs
+                                                .log_item_list_state
+                                                .selected()
+                                                .unwrap();
+                                            let log = &self.data.logs.selected().unwrap()[key_idx]
+                                                .to_string();
+                                            let value =
+                                                log.split(' ').last().unwrap().trim_matches(|p| {
+                                                    char::is_ascii_punctuation(&p)
+                                                });
 
-                        // Input Mode
-                        InputMode::Input if key.kind == KeyEventKind::Press => match key.code {
-                            KeyCode::Enter => {
-                                match self.focus.panel {
-                                    Focus::QueryInput => {
-                                        let raw_query = self.inputs.get(Focus::QueryInput);
-                                        self.add_query(raw_query.to_owned());
-                                        self.set_focus(UI {
-                                            loading: true,
-                                            ..self.focus
-                                        });
-                                    }
-                                    Focus::Rename => {
-                                        self.rename_query(
-                                            self.data.timeseries.selected.to_owned(),
-                                            self.inputs.get(Focus::Rename).to_owned(),
-                                        );
-                                    }
-                                    Focus::Search => {
-                                        let filter = self.inputs.get(Focus::Search);
-                                        self.add_filter(filter.into());
-                                        self.set_focus(UI {
-                                            panel: Focus::Default,
-                                            ..self.focus
-                                        });
-                                    }
-                                    Focus::SessionLoad => {
-                                        match self.inputs.get(Focus::SessionLoad) {
-                                            // Load session
-                                            "y" | "Y" => {
-                                                if let Err(e) = self.load_session() {
-                                                    error!("{}", e);
-                                                }
-                                            }
-                                            // Don't load session
-                                            _ => {}
+                                            self.add_query(value.to_owned());
+                                            self.set_focus(UI {
+                                                panel: Focus::Default,
+                                                ..self.focus
+                                            });
                                         }
-                                        self.config.session.is_loaded = true;
-                                        // Update focus to default
-                                        self.set_focus(UI {
-                                            panel: Focus::Default,
-                                            ..self.focus
-                                        });
-                                    }
-                                    Focus::SessionSave => {
-                                        match self.inputs.get(Focus::SessionSave) {
-                                            // Save session
-                                            "y" | "Y" => {
-                                                if let Err(e) = self.save_session() {
-                                                    error!("{}", e);
-                                                }
+                                        Focus::Default => {
+                                            if self.focus.tab != Tab::Graph {
+                                                self.set_focus(UI {
+                                                    panel: Focus::Log,
+                                                    ..self.focus
+                                                })
                                             }
-                                            _ => {}
                                         }
-                                        return Ok(());
-                                    }
-                                    _ => {}
-                                };
-                                self.inputs.clear(self.focus.panel);
-                                self.inputs.reset_cursor(self.focus.panel);
-                                self.set_focus(UI {
-                                    panel: Focus::Default,
-                                    input_mode: InputMode::Normal,
-                                    ..self.focus
-                                });
+                                        _ => {}
+                                    },
+                                    _ => (),
+                                }
                             }
-                            KeyCode::Char(to_insert) => {
-                                self.inputs.enter_char(self.focus.panel, to_insert);
-                            }
-                            KeyCode::Backspace => {
-                                self.inputs.delete_char(self.focus.panel);
-                            }
-                            KeyCode::Left => {
-                                self.inputs.move_cursor_left(self.focus.panel);
-                            }
-                            KeyCode::Right => {
-                                self.inputs.move_cursor_right(self.focus.panel);
-                            }
-                            KeyCode::Up => {
-                                self.inputs.clear(Focus::QueryInput);
-                                let query = self.data.query_history.pop_front().unwrap_or_default();
-                                self.inputs.set(Focus::QueryInput, query.clone());
-                                self.inputs.move_cursor_end(Focus::QueryInput);
-                                self.data.query_history.push_back(query);
-                            }
-                            KeyCode::Down => {
-                                let query = self.data.query_history.pop_back().unwrap_or_default();
-                                self.inputs.set(Focus::QueryInput, query.clone());
-                                self.inputs.move_cursor_end(Focus::QueryInput);
-                                self.data.query_history.push_front(query);
-                            }
-                            KeyCode::Esc => match self.focus.panel {
-                                Focus::SessionLoad => {}
-                                _ => {
+
+                            // Input Mode
+                            InputMode::Input if key.kind == KeyEventKind::Press => match key.code {
+                                KeyCode::Enter => {
+                                    match self.focus.panel {
+                                        Focus::QueryInput => {
+                                            let raw_query = self.inputs.get(Focus::QueryInput);
+                                            self.add_query(raw_query.to_owned());
+                                            self.set_focus(UI {
+                                                loading: true,
+                                                ..self.focus
+                                            });
+                                        }
+                                        Focus::Rename => {
+                                            self.rename_query(
+                                                self.data.timeseries.selected.to_owned(),
+                                                self.inputs.get(Focus::Rename).to_owned(),
+                                            );
+                                        }
+                                        Focus::Search => {
+                                            let filter = self.inputs.get(Focus::Search);
+                                            self.add_filter(filter.into());
+                                            self.set_focus(UI {
+                                                panel: Focus::Default,
+                                                ..self.focus
+                                            });
+                                        }
+                                        Focus::SessionLoad => {
+                                            match self.inputs.get(Focus::SessionLoad) {
+                                                // Load session
+                                                "y" | "Y" => {
+                                                    if let Err(e) = self.load_session() {
+                                                        error!("{}", e);
+                                                    }
+                                                }
+                                                // Don't load session
+                                                _ => {}
+                                            }
+                                            self.config.session.is_loaded = true;
+                                            // Update focus to default
+                                            self.set_focus(UI {
+                                                panel: Focus::Default,
+                                                ..self.focus
+                                            });
+                                        }
+                                        Focus::SessionSave => {
+                                            match self.inputs.get(Focus::SessionSave) {
+                                                // Save session
+                                                "y" | "Y" => {
+                                                    if let Err(e) = self.save_session() {
+                                                        error!("{}", e);
+                                                    }
+                                                }
+                                                _ => {}
+                                            }
+                                            return Ok(());
+                                        }
+                                        _ => {}
+                                    };
+                                    self.inputs.clear(self.focus.panel);
+                                    self.inputs.reset_cursor(self.focus.panel);
                                     self.set_focus(UI {
                                         panel: Focus::Default,
                                         input_mode: InputMode::Normal,
                                         ..self.focus
                                     });
                                 }
+                                KeyCode::Char(to_insert) => {
+                                    self.inputs.enter_char(self.focus.panel, to_insert);
+                                }
+                                KeyCode::Backspace => {
+                                    self.inputs.delete_char(self.focus.panel);
+                                }
+                                KeyCode::Left => {
+                                    self.inputs.move_cursor_left(self.focus.panel);
+                                }
+                                KeyCode::Right => {
+                                    self.inputs.move_cursor_right(self.focus.panel);
+                                }
+                                KeyCode::Up => {
+                                    self.inputs.clear(Focus::QueryInput);
+                                    let query =
+                                        self.data.query_history.pop_front().unwrap_or_default();
+                                    self.inputs.set(Focus::QueryInput, query.clone());
+                                    self.inputs.move_cursor_end(Focus::QueryInput);
+                                    self.data.query_history.push_back(query);
+                                }
+                                KeyCode::Down => {
+                                    let query =
+                                        self.data.query_history.pop_back().unwrap_or_default();
+                                    self.inputs.set(Focus::QueryInput, query.clone());
+                                    self.inputs.move_cursor_end(Focus::QueryInput);
+                                    self.data.query_history.push_front(query);
+                                }
+                                KeyCode::Esc => match self.focus.panel {
+                                    Focus::SessionLoad => {}
+                                    _ => {
+                                        self.set_focus(UI {
+                                            panel: Focus::Default,
+                                            input_mode: InputMode::Normal,
+                                            ..self.focus
+                                        });
+                                    }
+                                },
+                                _ => {}
                             },
                             _ => {}
-                        },
-                        _ => {}
+                        }
+                        self.redraw = true; // Probably want to redraw on any key event
                     }
-                    // On any key event, we probably want to redraw
-                    self.redraw = true;
+                    Event::Resize(_, _) => {
+                        self.redraw = true;
+                    }
+                    _ => {}
                 }
             }
 
